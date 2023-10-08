@@ -6,7 +6,7 @@ import binvox_rw
 import matplotlib.pyplot as plt
 
 
-def mesh2binvox(path: str, resolution: int, normalize: bool = True) -> None:
+def mesh2binvox(path: str, resolution: int, normalize: bool = True, overwrite: bool = True) -> None:
 
     mesh = trimesh.load(path)
     if isinstance(mesh, trimesh.Scene):
@@ -28,6 +28,11 @@ def mesh2binvox(path: str, resolution: int, normalize: bool = True) -> None:
 
     norm_path = path.replace(".obj", "_norm.obj")
     mesh.export(norm_path)
+    
+    if overwrite:
+        binvox_path = f'{norm_path.replace("obj", "binvox")}'
+        if os.path.exists(binvox_path):
+            os.remove(binvox_path)
 
     command = f"binvox -cb -e -d {resolution} {norm_path}"
     os.system(command)
@@ -55,4 +60,3 @@ def plot_binvox(path: str, map_y_to_z: bool = False) -> None:
     ax.set_aspect('equal')
 
     plt.show()
-    
