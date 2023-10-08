@@ -1,8 +1,9 @@
-import binvox
 import trimesh
-import binvox_rw
 import numpy as np
 import os
+
+import binvox_rw
+import matplotlib.pyplot as plt
 
 
 def mesh2binvox(path: str, resolution: int, normalize: bool = True) -> None:
@@ -30,3 +31,28 @@ def mesh2binvox(path: str, resolution: int, normalize: bool = True) -> None:
 
     command = f"binvox -cb -e -d {resolution} {norm_path}"
     os.system(command)
+    
+def plot_binvox(path: str, map_y_to_z: bool = False) -> None:
+
+    with open(path, 'rb') as f:
+        model = binvox_rw.read_as_3d_array(f)
+
+    data = model.data
+
+    fig = plt.figure()
+
+    ax = fig.add_subplot(111, projection='3d')
+    
+    x, y, z = data.nonzero()
+    if map_y_to_z:
+        y, z = z, y
+
+    ax.scatter(x, y, z)
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_aspect('equal')
+
+    plt.show()
+    
