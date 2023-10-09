@@ -2,7 +2,7 @@ import trimesh
 import numpy as np
 import os
 
-import binvox_rw
+import scipy
 import matplotlib.pyplot as plt
 
 
@@ -37,25 +37,36 @@ def mesh2binvox(path: str, resolution: int, normalize: bool = True, overwrite: b
     command = f"binvox -cb -e -d {resolution} {norm_path}"
     os.system(command)
     
-def plot_binvox(data: np.ndarray, map_y_to_z: bool = False, plot_voxels: bool = False) -> None:
+def plot_binvox(
+    data: np.ndarray, 
+    map_y_to_z: bool = False, 
+    plot_voxels: bool = False, 
+    downsample_rate: float = 1.0,
+    title: str = ""
+) -> None:
 
     fig = plt.figure(figsize=(6, 6))
-
-    ax = fig.add_subplot(111, projection='3d')
+    ax = fig.add_subplot(111, projection="3d")
     
     if map_y_to_z:
         data = np.transpose(data, (0, 2, 1))
 
     color = "blue"
+    
     if plot_voxels:
+        data = scipy.ndimage.zoom(data, downsample_rate, order=0)
         ax.voxels(data, facecolors=color)
     else:
         x, y, z = data.nonzero()
         ax.scatter(x, y, z, c=color)
 
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.set_aspect('equal')
+    ax.set_aspect("equal")
+    
+    ax.xaxis.set_ticklabels([])
+    ax.yaxis.set_ticklabels([])
+    ax.zaxis.set_ticklabels([])
+    
+    ax.set_title(title)
+    
 
     plt.show()
