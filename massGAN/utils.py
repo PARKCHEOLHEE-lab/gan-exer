@@ -53,18 +53,15 @@ def plot_binvox(
 
     color = "blue"
     
+    x, y, z = data.nonzero()
+    
     if plot_voxels:
         data = scipy.ndimage.zoom(data, downsample_rate, order=0)
         ax.voxels(data, facecolors=color)
     else:
-        x, y, z = data.nonzero()
         ax.scatter(x, y, z, c=color)
 
     ax.set_aspect("equal")
-    
-    ax.xaxis.set_ticklabels([])
-    ax.yaxis.set_ticklabels([])
-    ax.zaxis.set_ticklabels([])
     
     ax.set_title(title)
     
