@@ -3,13 +3,83 @@ import numpy as np
 import os
 
 import scipy
+import binvox_rw
 import matplotlib.pyplot as plt
+import shutil
+import copy
+
+from typing import List, Tuple
+
+class PreprocessConfig:    
+    OBJ_FORMAT = ".obj"
+    BINVOX_FORMAT = ".binvox"
+    
+    BINVOX_RESOLUTION = 36
+    ROTATION_MAX = 360
+    ROTATION_DIVIDER = 10
+    ROTATION_STEP = ROTATION_MAX / ROTATION_DIVIDER
+
+    X = (1, 0, 0)
+    Y = (0, 1, 0)
+    Z = (0, 0, 1)
+
+    DATA_BASE_DIR = "data"
+    DATA_ORIGINAL_DIR = "original"
+    DATA_PREPROCESSED_DIR = "preprocessed"
+
+    DATA_ORIGINAL_DIR_MERGED = os.path.join(DATA_BASE_DIR, DATA_ORIGINAL_DIR)
+    DATA_PREPROCESSED_DIR_MERGED = os.path.join(DATA_BASE_DIR, DATA_PREPROCESSED_DIR)
+
 
 class Utils:
-
     @staticmethod
-    def mesh_to_binvox(path: str, resolution: int, normalize: bool = True, overwrite: bool = True) -> None:
+    def normalize_mesh(mesh: trimesh.Trimesh) -> None:
+        """Normalize to 0 ~ 1 values the given mesh
 
+        Args:
+            mesh (trimesh.Trimesh): Given mesh to normalize
+        """
+
+        verts = mesh.vertices
+        centers = np.mean(verts, axis=0)
+        verts = verts - centers
+        length = np.max(np.linalg.norm(verts, 2, axis=1))
+        verts = verts * (1. / length)
+        
+        mesh.vertices = verts
+    
+    @staticmethod
+    def get_rotated_mesh(mesh: trimesh.Trimesh, angle: float, axis: Tuple[int] = PreprocessConfig.Z) -> trimesh.Trimesh:
+        """Return the rotated mesh by the given mesh and angle
+
+        Args:
+            mesh (trimesh.Trimesh): Given mesh
+            angle (float): Angle to rotate
+            axis (Tuple[int], optional): Axis to rotate. Defaults to PreprocessConfig.Z.
+
+        Returns:
+            trimesh.Trimesh: Rotated mesh
+        """
+
+        rotation_matrix = trimesh.transformations.rotation_matrix(angle, axis)
+        rotated_mesh = copy.deepcopy(mesh)
+        rotated_mesh.apply_transform(rotation_matrix)
+        
+        return rotated_mesh
+        
+    @staticmethod
+    def load_mesh(path: str, normalize: bool = False, map_y_to_z: bool = False) -> trimesh.Trimesh:
+        """Load mesh data from .obj file
+
+        Args:
+            path (str): Path to load
+            normalize (bool, optional): Whether normalizing mesh. Defaults to False.
+            map_y_to_z (bool, optional): Change axes (y to z, z to y). Defaults to False.
+
+        Returns:
+            trimesh.Trimesh: Loaded mesh
+        """
+        
         mesh = trimesh.load(path)
         if isinstance(mesh, trimesh.Scene):
             geo_list = []
@@ -20,89 +90,134 @@ class Utils:
         mesh.fix_normals(multibody=True)
 
         if normalize:
-            verts = mesh.vertices
-            centers = np.mean(verts, axis=0)
-            verts = verts - centers
-            length = np.max(np.linalg.norm(verts, 2, axis=1))
-            verts = verts * (1. / length)
+            Utils.normalize_mesh(mesh)
             
-            mesh.vertices = verts
+        if map_y_to_z:
+            mesh.vertices[:, [1, 2]] = mesh.vertices[:, [2, 1]]
 
-        norm_path = path.replace(".obj", "_norm.obj")
-        mesh.export(norm_path)
-        
-        if overwrite:
-            binvox_path = f'{norm_path.replace("obj", "binvox")}'
-            if os.path.exists(binvox_path):
-                os.remove(binvox_path)
+        return mesh
 
-        command = f"binvox -cb -e -d {resolution} {norm_path}"
+    @staticmethod
+    def mesh_to_binvox(
+        mesh: trimesh.Trimesh,
+        save_path: str,
+        resolution: int, 
+    ) -> None:
+        """Convert mesh that is shaped .obj format to .binvox
+
+        Args:
+            mesh (trimesh.Trimesh): Given mesh
+            save_path (str): Path to save
+            resolution (int): Binary voxel grid resolution
+        """
+
+        data_name = mesh.path.split("\\")[-1]
+        merged_save_path = os.path.join(save_path, data_name)
+        mesh.export(merged_save_path)
+                    
+        command = f"binvox -cb -e -d {resolution} {merged_save_path}"
         os.system(command)
+        
+        os.remove(os.path.join(save_path, "material.mtl"))
+        os.remove(os.path.join(save_path, "material_0.png"))
+        os.remove(os.path.join(save_path, data_name))
     
     @staticmethod
     def plot_binvox(
-        data: np.ndarray, 
-        map_y_to_z: bool = False, 
+        data_list: List[np.ndarray], 
         plot_voxels: bool = False, 
         downsample_rate: float = 1.0,
         title: str = ""
     ) -> None:
+        """Plot .binvox data
 
-        fig = plt.figure(figsize=(6, 6))
-        ax = fig.add_subplot(111, projection="3d")
-        
-        if map_y_to_z:
-            data = np.transpose(data, (0, 2, 1))
+        Args:
+            data_list (List[np.ndarray]): Given binvox data list
+            plot_voxels (bool, optional): Whether plotting voxel or scatter. Defaults to False.
+            downsample_rate (float, optional): Resolution for only plotting. Defaults to 1.0.
+            title (str, optional): Title to plot. Defaults to "".
+        """
+
+        data_list_length = len(data_list)
+        figure = plt.figure(figsize=(data_list_length * 2, data_list_length / 3))
+        figure.suptitle(title)
 
         color = "blue"
-        
-        x, y, z = data.nonzero()
-        
-        if plot_voxels:
-            data = scipy.ndimage.zoom(data, downsample_rate, order=0)
-            ax.voxels(data, facecolors=color)
-        else:
-            ax.scatter(x, y, z, c=color)
+
+        for n in range(1, data_list_length + 1):
+            ax = figure.add_subplot(1, data_list_length, n, projection="3d")
+            
+            data = data_list[n - 1]
+            
+            x, y, z = data.nonzero()
+
+            if plot_voxels:
+                data = scipy.ndimage.zoom(data, downsample_rate, order=0)
+                ax.voxels(data, facecolors=color)
+            else:
+                ax.scatter(x, y, z, c=color)
 
         ax.set_aspect("equal")
-        
-        ax.set_title(title)
-        
+        figure.tight_layout()
 
         plt.show()
+
+class Preprocessor(Utils):
+    def preprocess(self, overwrite=True) -> None:
+        """Main function for preprocessing data
+
+        Args:
+            overwrite (bool, optional): whether data overwriting. Defaults to True.
+        """
         
-    @staticmethod
-    def rotate_binvox(data: np.ndarray, degree: float, map_y_to_z: bool = False) -> np.ndarray:
-        theta = np.radians(degree)
-        matrix = np.array(
-            [
-                [np.cos(theta), -np.sin(theta), 0],
-                [np.sin(theta), np.cos(theta), 0],
-                [0, 0, 1]
-            ]
-        )
+        for data_name in os.listdir(PreprocessConfig.DATA_ORIGINAL_DIR_MERGED):
+            
+            each_save_dir = os.path.join(PreprocessConfig.DATA_PREPROCESSED_DIR_MERGED, data_name)
+            if not os.path.isdir(each_save_dir):
+                os.mkdir(each_save_dir)
+            
+            each_obj_data_path = os.path.join(
+                PreprocessConfig.DATA_ORIGINAL_DIR_MERGED,
+                data_name, 
+                data_name + PreprocessConfig.OBJ_FORMAT
+            )
+            
+            mesh = self.load_mesh(path=each_obj_data_path, normalize=True, map_y_to_z=True)
 
-        rotated_binvox = np.zeros_like(data)
-        
-        if map_y_to_z:
-            data = np.transpose(data, (0, 2, 1))
-        
-        center = np.array([data.shape[0] / 2, data.shape[1] / 2, data.shape[2] / 2])
+            if overwrite:
+                for file_name in os.listdir(each_save_dir):
+                    if file_name.endswith(PreprocessConfig.BINVOX_FORMAT):
+                        os.remove(os.path.join(each_save_dir, file_name))
 
-        for x in range(data.shape[0]):
-            for y in range(data.shape[1]):
-                for z in range(data.shape[2]):
-                    if data[x, y, z]:
-                        coord = np.array([x, y, z]) - center
-                        rotated_coord = np.dot(matrix, coord)
-                        
-                        rotated_coord += center
-                        
-                        rotated_x, rotated_y, rotated_z = np.round(rotated_coord).astype(int)
+            rotation_degree = 0
+            binvox_number = 0
+            
+            data_list: List[np.ndarray]
+            data_list = []
 
-                        if (0 <= rotated_x < data.shape[0] and
-                            0 <= rotated_y < data.shape[1] and
-                            0 <= rotated_z < data.shape[2]):
-                            rotated_binvox[rotated_x, rotated_y, rotated_z] = 1
+            while rotation_degree < PreprocessConfig.ROTATION_MAX:
+                rotated_mesh = self.get_rotated_mesh(mesh=mesh, angle=np.radians(rotation_degree))
+                rotated_mesh.path = each_obj_data_path
+                
+                rotation_degree += PreprocessConfig.ROTATION_STEP
 
-        return rotated_binvox
+                self.mesh_to_binvox(
+                    mesh=rotated_mesh,
+                    save_path=each_save_dir, 
+                    resolution=PreprocessConfig.BINVOX_RESOLUTION, 
+                )
+
+                binvox_number_string = "_" + str(binvox_number) if binvox_number > 0 else ""
+            
+                each_binvox_data_path = os.path.join(
+                    each_save_dir, data_name + binvox_number_string + PreprocessConfig.BINVOX_FORMAT
+                )
+                
+                binvox_number += 1
+                
+                with open(each_binvox_data_path, 'rb') as f:
+                    model = binvox_rw.read_as_3d_array(f)
+                    
+                    data_list.append(model.data)
+                    
+            self.plot_binvox(data_list=data_list, plot_voxels=True, title=data_name)
