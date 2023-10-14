@@ -1,23 +1,25 @@
 import trimesh
 import numpy as np
 import os
+import random
 
 import scipy
 import binvox_rw
 import matplotlib.pyplot as plt
-import shutil
 import copy
 
 from typing import List, Tuple
+
+random.seed(777)
 
 class PreprocessConfig:    
     OBJ_FORMAT = ".obj"
     BINVOX_FORMAT = ".binvox"
     
     BINVOX_RESOLUTION = 36
+
     ROTATION_MAX = 360
-    ROTATION_DIVIDER = 10
-    ROTATION_STEP = ROTATION_MAX / ROTATION_DIVIDER
+    ROTATION_INTERVAL = 36
 
     X = (1, 0, 0)
     Y = (0, 1, 0)
@@ -49,7 +51,9 @@ class Utils:
         mesh.vertices = verts
     
     @staticmethod
-    def get_rotated_mesh(mesh: trimesh.Trimesh, angle: float, axis: Tuple[int] = PreprocessConfig.Z) -> trimesh.Trimesh:
+    def get_rotated_mesh(
+        mesh: trimesh.Trimesh, angle: float, axis: Tuple[int] = PreprocessConfig.Z
+    ) -> trimesh.Trimesh:
         """Return the rotated mesh by the given mesh and angle
 
         Args:
@@ -63,9 +67,54 @@ class Utils:
 
         rotation_matrix = trimesh.transformations.rotation_matrix(angle, axis)
         rotated_mesh = copy.deepcopy(mesh)
+        rotated_mesh.path = mesh.path
         rotated_mesh.apply_transform(rotation_matrix)
         
         return rotated_mesh
+
+    @staticmethod
+    def get_mirrored_mesh(
+        mesh: trimesh.Trimesh, point: Tuple[float] = None, normal: Tuple[float] = None
+    ) -> trimesh.Trimesh:
+        """Return the mirrored mesh by the given mesh, normal and point
+
+        Args:
+            mesh (trimesh.Trimesh): Mesh to mirror
+            point (Tuple[float], optional): Base point to mirror. Defaults to None.
+            normal (Tuple[float], optional): Base vextor to mirror. Defaults to None.
+
+        Returns:
+            trimesh.Trimesh: Mirrored mesh
+        """
+        
+        if point is None:
+            point = mesh.centroid
+
+        if normal is None:
+            normal = PreprocessConfig.X
+
+        mirroring_transform = trimesh.transformations.reflection_matrix(point=point, normal=normal)
+        mirrored_mesh = copy.deepcopy(mesh)
+        mirrored_mesh.path = mesh.path
+        mirrored_mesh.apply_transform(mirroring_transform)
+        
+        return mirrored_mesh
+    
+    @staticmethod
+    def get_binvox_model(path: str) -> binvox_rw.Voxels:
+        """Get binvox data from the path
+
+        Args:
+            path (str): binvox data path
+
+        Returns:
+            binvox_rw.Voxels: model
+        """
+
+        with open(path, 'rb') as f:
+            model = binvox_rw.read_as_3d_array(f)
+
+        return model
         
     @staticmethod
     def load_mesh(path: str, normalize: bool = False, map_y_to_z: bool = False) -> trimesh.Trimesh:
@@ -81,6 +130,7 @@ class Utils:
         """
         
         mesh = trimesh.load(path)
+        
         if isinstance(mesh, trimesh.Scene):
             geo_list = []
             for g in mesh.geometry.values():
@@ -94,6 +144,8 @@ class Utils:
             
         if map_y_to_z:
             mesh.vertices[:, [1, 2]] = mesh.vertices[:, [2, 1]]
+
+        mesh.path = path
 
         return mesh
 
@@ -118,16 +170,17 @@ class Utils:
         command = f"binvox -cb -e -d {resolution} {merged_save_path}"
         os.system(command)
         
-        os.remove(os.path.join(save_path, "material.mtl"))
-        os.remove(os.path.join(save_path, "material_0.png"))
-        os.remove(os.path.join(save_path, data_name))
-    
+        for file_name in os.listdir(save_path):
+            if not file_name.endswith(".binvox"):
+                os.remove(os.path.join(save_path, file_name))
+        
     @staticmethod
     def plot_binvox(
         data_list: List[np.ndarray], 
         plot_voxels: bool = False, 
         downsample_rate: float = 1.0,
-        title: str = ""
+        title: str = "",
+        figsize: Tuple[int] = None,
     ) -> None:
         """Plot .binvox data
 
@@ -139,13 +192,19 @@ class Utils:
         """
 
         data_list_length = len(data_list)
-        figure = plt.figure(figsize=(data_list_length * 2, data_list_length / 3))
+        data_list_divider = 10
+        row = max(1, int(np.ceil(data_list_length / data_list_divider)))
+        
+        if figsize is None:
+            figsize = (data_list_length * 2, data_list_length / 3)
+        
+        figure = plt.figure(figsize=figsize)
         figure.suptitle(title)
 
         color = "blue"
 
         for n in range(1, data_list_length + 1):
-            ax = figure.add_subplot(1, data_list_length, n, projection="3d")
+            ax = figure.add_subplot(row, data_list_divider, n, projection="3d")
             
             data = data_list[n - 1]
             
@@ -163,11 +222,34 @@ class Utils:
         plt.show()
 
 class Preprocessor(Utils):
-    def preprocess(self, overwrite=True) -> None:
-        """Main function for preprocessing data
+    def __init__(
+        self, 
+        use_to_rotate: bool = False,
+        use_to_mirror: bool = False,
+        use_to_overwrite: bool = False,
+        use_to_plot: bool = False,
+        plot_voxels: bool = False,
+        binvox_resolution: int = PreprocessConfig.BINVOX_RESOLUTION, 
+        rotation_interval: float = PreprocessConfig.ROTATION_INTERVAL,
+        rotation_max: float = PreprocessConfig.ROTATION_MAX
+        
+    ):  
+        self.use_to_rotate = use_to_rotate
+        self.use_to_mirror = use_to_mirror
+        self.use_to_overwrite = use_to_overwrite
+        self.use_to_plot = use_to_plot
+        
+        self.plot_voxels = plot_voxels
 
-        Args:
-            overwrite (bool, optional): whether data overwriting. Defaults to True.
+        self.binvox_resolution = binvox_resolution
+        self.rotation_interval = rotation_interval
+        self.rotation_max = rotation_max
+        
+        assert self.rotation_interval > 0, "The input`rotation_interval` is not bigger than 0."
+
+    
+    def preprocess(self) -> None:
+        """Main function for preprocessing data
         """
         
         for data_name in os.listdir(PreprocessConfig.DATA_ORIGINAL_DIR_MERGED):
@@ -181,43 +263,65 @@ class Preprocessor(Utils):
                 data_name, 
                 data_name + PreprocessConfig.OBJ_FORMAT
             )
-            
-            mesh = self.load_mesh(path=each_obj_data_path, normalize=True, map_y_to_z=True)
 
-            if overwrite:
+            if self.use_to_overwrite:
                 for file_name in os.listdir(each_save_dir):
                     if file_name.endswith(PreprocessConfig.BINVOX_FORMAT):
                         os.remove(os.path.join(each_save_dir, file_name))
 
-            rotation_degree = 0
-            binvox_number = 0
+            mesh_to_preprocess: List[trimesh.Trimesh]
+            mesh_to_preprocess = []
             
+            mesh = self.load_mesh(path=each_obj_data_path, normalize=True, map_y_to_z=True)
+            mesh_to_preprocess.append(mesh)
+            
+            if self.use_to_mirror:
+                mirrored_mesh = self.get_mirrored_mesh(mesh=mesh)
+                mesh_to_preprocess.append(mirrored_mesh)
+
+            for each_mesh_to_preprocess in mesh_to_preprocess:
+                self.mesh_to_binvox(
+                    mesh=each_mesh_to_preprocess,
+                    save_path=each_save_dir, 
+                    resolution=self.binvox_resolution, 
+                )
+                
+                if self.use_to_rotate:
+                    rotation_degree = self.rotation_interval
+
+                    while True:
+                        
+                        rotated_mesh = self.get_rotated_mesh(
+                            mesh=each_mesh_to_preprocess, angle=np.radians(rotation_degree)
+                        )
+                        
+                        rotation_degree += self.rotation_interval
+
+                        self.mesh_to_binvox(
+                            mesh=rotated_mesh,
+                            save_path=each_save_dir, 
+                            resolution=self.binvox_resolution, 
+                        )
+                        
+                        if (
+                            rotation_degree >= PreprocessConfig.ROTATION_MAX
+                            or np.isclose(rotation_degree, PreprocessConfig.ROTATION_MAX)
+                        ):
+                            break
+
             data_list: List[np.ndarray]
             data_list = []
+                        
+            for each_data in os.listdir(each_save_dir):
+                if each_data.endswith(".binvox"):
+                    each_binvox_data_path = os.path.join(each_save_dir, each_data)
+                    model = self.get_binvox_model(each_binvox_data_path)
 
-            while rotation_degree < PreprocessConfig.ROTATION_MAX:
-                rotated_mesh = self.get_rotated_mesh(mesh=mesh, angle=np.radians(rotation_degree))
-                rotated_mesh.path = each_obj_data_path
-                
-                rotation_degree += PreprocessConfig.ROTATION_STEP
-
-                self.mesh_to_binvox(
-                    mesh=rotated_mesh,
-                    save_path=each_save_dir, 
-                    resolution=PreprocessConfig.BINVOX_RESOLUTION, 
-                )
-
-                binvox_number_string = "_" + str(binvox_number) if binvox_number > 0 else ""
-            
-                each_binvox_data_path = os.path.join(
-                    each_save_dir, data_name + binvox_number_string + PreprocessConfig.BINVOX_FORMAT
-                )
-                
-                binvox_number += 1
-                
-                with open(each_binvox_data_path, 'rb') as f:
-                    model = binvox_rw.read_as_3d_array(f)
-                    
                     data_list.append(model.data)
-                    
-            self.plot_binvox(data_list=data_list, plot_voxels=True, title=data_name)
+
+            if self.use_to_plot:
+                self.plot_binvox(
+                    data_list=random.choices(data_list, k=7), 
+                    plot_voxels=self.plot_voxels, 
+                    title=f"{data_name} plotted randomly"
+                )
