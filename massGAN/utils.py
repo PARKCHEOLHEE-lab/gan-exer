@@ -16,7 +16,7 @@ class PreprocessConfig:
     OBJ_FORMAT = ".obj"
     BINVOX_FORMAT = ".binvox"
     
-    BINVOX_RESOLUTION = 36
+    BINVOX_RESOLUTION = 128
 
     ROTATION_MAX = 360
     ROTATION_INTERVAL = 36
