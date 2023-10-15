@@ -3,7 +3,7 @@ from typing import List
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 
 from utils import Utils
 from config import Config
