@@ -12,25 +12,7 @@ from typing import List, Tuple
 
 random.seed(777)
 
-class PreprocessConfig:    
-    OBJ_FORMAT = ".obj"
-    BINVOX_FORMAT = ".binvox"
-    
-    BINVOX_RESOLUTION = 128
-
-    ROTATION_MAX = 360
-    ROTATION_INTERVAL = 36
-
-    X = (1, 0, 0)
-    Y = (0, 1, 0)
-    Z = (0, 0, 1)
-
-    DATA_BASE_DIR = "data"
-    DATA_ORIGINAL_DIR = "original"
-    DATA_PREPROCESSED_DIR = "preprocessed"
-
-    DATA_ORIGINAL_DIR_MERGED = os.path.join(DATA_BASE_DIR, DATA_ORIGINAL_DIR)
-    DATA_PREPROCESSED_DIR_MERGED = os.path.join(DATA_BASE_DIR, DATA_PREPROCESSED_DIR)
+from config import Config
 
 
 class Utils:
@@ -52,14 +34,14 @@ class Utils:
     
     @staticmethod
     def get_rotated_mesh(
-        mesh: trimesh.Trimesh, angle: float, axis: Tuple[int] = PreprocessConfig.Z
+        mesh: trimesh.Trimesh, angle: float, axis: Tuple[int] = Config.Z
     ) -> trimesh.Trimesh:
         """Return the rotated mesh by the given mesh and angle
 
         Args:
             mesh (trimesh.Trimesh): Given mesh
             angle (float): Angle to rotate
-            axis (Tuple[int], optional): Axis to rotate. Defaults to PreprocessConfig.Z.
+            axis (Tuple[int], optional): Axis to rotate. Defaults to Config.Z.
 
         Returns:
             trimesh.Trimesh: Rotated mesh
@@ -91,7 +73,7 @@ class Utils:
             point = mesh.centroid
 
         if normal is None:
-            normal = PreprocessConfig.X
+            normal = Config.X
 
         mirroring_transform = trimesh.transformations.reflection_matrix(point=point, normal=normal)
         mirrored_mesh = copy.deepcopy(mesh)
@@ -229,9 +211,9 @@ class Preprocessor(Utils):
         use_to_overwrite: bool = False,
         use_to_plot: bool = False,
         plot_voxels: bool = False,
-        binvox_resolution: int = PreprocessConfig.BINVOX_RESOLUTION, 
-        rotation_interval: float = PreprocessConfig.ROTATION_INTERVAL,
-        rotation_max: float = PreprocessConfig.ROTATION_MAX
+        binvox_resolution: int = Config.BINVOX_RESOLUTION, 
+        rotation_interval: float = Config.ROTATION_INTERVAL,
+        rotation_max: float = Config.ROTATION_MAX
         
     ):  
         self.use_to_rotate = use_to_rotate
@@ -252,21 +234,21 @@ class Preprocessor(Utils):
         """Main function for preprocessing data
         """
         
-        for data_name in os.listdir(PreprocessConfig.DATA_ORIGINAL_DIR_MERGED):
+        for data_name in os.listdir(Config.DATA_ORIGINAL_DIR_MERGED):
             
-            each_save_dir = os.path.join(PreprocessConfig.DATA_PREPROCESSED_DIR_MERGED, data_name)
+            each_save_dir = os.path.join(Config.DATA_PREPROCESSED_DIR_MERGED, data_name)
             if not os.path.isdir(each_save_dir):
                 os.mkdir(each_save_dir)
             
             each_obj_data_path = os.path.join(
-                PreprocessConfig.DATA_ORIGINAL_DIR_MERGED,
+                Config.DATA_ORIGINAL_DIR_MERGED,
                 data_name, 
-                data_name + PreprocessConfig.OBJ_FORMAT
+                data_name + Config.OBJ_FORMAT
             )
 
             if self.use_to_overwrite:
                 for file_name in os.listdir(each_save_dir):
-                    if file_name.endswith(PreprocessConfig.BINVOX_FORMAT):
+                    if file_name.endswith(Config.BINVOX_FORMAT):
                         os.remove(os.path.join(each_save_dir, file_name))
 
             mesh_to_preprocess: List[trimesh.Trimesh]
@@ -304,8 +286,8 @@ class Preprocessor(Utils):
                         )
                         
                         if (
-                            rotation_degree >= PreprocessConfig.ROTATION_MAX
-                            or np.isclose(rotation_degree, PreprocessConfig.ROTATION_MAX)
+                            rotation_degree >= Config.ROTATION_MAX
+                            or np.isclose(rotation_degree, Config.ROTATION_MAX)
                         ):
                             break
 
