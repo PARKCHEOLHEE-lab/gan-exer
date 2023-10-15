@@ -17,7 +17,18 @@ class ModelConfig:
     GENERATOR_INIT_OUT_CHANNELS = 256
     DISCRIMINATOR_INIT_OUT_CHANNELS = 64
     
-    BATCH_SIZE = 100
+    EPOCHS = 500
+    LEARNING_RATE = 0.0002
+    BATCH_SIZE = 32
+    BATCH_SIZE_TO_EVALUATE = 10
+    Z_DIM = 128
+    
+    LOG_INTERVAL = 10
+    
+    XAVIER = "xavier"
+    HE = "he"
+    
+    PTHS_DIR = "pths"
     
     @staticmethod
     def set_seed(seed: int = SEED):
@@ -30,7 +41,7 @@ class ModelConfig:
         random.seed(seed)
         
         print(
-            f"""
+            f"""Seeds status:
             Seeds set for torch        : {torch.initial_seed()}
             Seeds set for torch on GPU : {torch.cuda.initial_seed()}
             Seeds set for numpy        : {seed}
@@ -58,9 +69,11 @@ class PreprocessConfig:
     DATA_BASE_DIR = "data"
     DATA_ORIGINAL_DIR = "original"
     DATA_PREPROCESSED_DIR = "preprocessed"
+    DATA_GENERATED_DIR = "generated"
 
     DATA_ORIGINAL_DIR_MERGED = os.path.join(DATA_BASE_DIR, DATA_ORIGINAL_DIR)
     DATA_PREPROCESSED_DIR_MERGED = os.path.join(DATA_BASE_DIR, DATA_PREPROCESSED_DIR)
+    DATA_GENERATED_DIR_MERGED = os.path.join(DATA_BASE_DIR, DATA_GENERATED_DIR)
     
     
 class Config(ModelConfig, PreprocessConfig):
