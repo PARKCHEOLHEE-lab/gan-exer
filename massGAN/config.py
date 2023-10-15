@@ -19,9 +19,13 @@ class ModelConfig:
     
     EPOCHS = 500
     LEARNING_RATE = 0.0002
-    BATCH_SIZE = 32
-    BATCH_SIZE_TO_EVALUATE = 10
+    BATCH_SIZE = 64
+    BATCH_SIZE_TO_EVALUATE = 7
     Z_DIM = 128
+    BETAS = (0.5, 0.999)
+    
+    LAMBDA_1 = 10
+    LAMBDA_2 = 1
     
     LOG_INTERVAL = 10
     
@@ -40,15 +44,11 @@ class ModelConfig:
         np.random.seed(seed)
         random.seed(seed)
         
-        print(
-            f"""Seeds status:
-            Seeds set for torch        : {torch.initial_seed()}
-            Seeds set for torch on GPU : {torch.cuda.initial_seed()}
-            Seeds set for numpy        : {seed}
-            Seeds set for random       : {seed}
-            """
-        )
-    
+        print("Seeds status:")
+        print(f"  Seeds set for torch        : {torch.initial_seed()}")
+        print(f"  Seeds set for torch on GPU : {torch.cuda.initial_seed()}")
+        print(f"  Seeds set for numpy        : {seed}")
+        print(f"  Seeds set for random       : {seed}")
 
 class PreprocessConfig:
     """Configuration related to the preprocessing data

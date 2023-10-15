@@ -150,17 +150,9 @@ class MassGANTrainer(Config, WeightsInitializer):
     ):  
         self.set_seed(seed)
         
-
-        generated_dir = self.DATA_GENERATED_DIR_MERGED
-        if not os.path.isdir(generated_dir):
-            os.mkdir(generated_dir)
-
-        self.generated_datetiime_dir = os.path.join(
-            generated_dir, str(datetime.datetime.now()).replace(":", "-")
-        )
-        
-        if not os.path.isdir(self.generated_datetiime_dir):
-            os.mkdir(self.generated_datetiime_dir)
+        self._make_dirs()
+        self._set_optimizers(generator, discriminator, learning_rate)
+        self._set_weights(generator, discriminator, apply_weights)
         
         self.generator = generator
         self.discriminator = discriminator
@@ -168,35 +160,164 @@ class MassGANTrainer(Config, WeightsInitializer):
         self.epochs = epochs
         self.loss_function = loss_function
         self.learning_rate = learning_rate
+        
+    def _make_dirs(self) -> None:
+        """Make directories to save
+        """
+
+        now = str(datetime.datetime.now()).replace(":", "-")
+
+        generated_dir = self.DATA_GENERATED_DIR_MERGED
+        if not os.path.isdir(generated_dir):
+            os.mkdir(generated_dir)
+
+        self.generated_datetiime_dir = os.path.join(generated_dir, now)
+        if not os.path.isdir(self.generated_datetiime_dir):
+            os.mkdir(self.generated_datetiime_dir)
+
+        if not os.path.isdir(self.PTHS_DIR):
+            os.mkdir(self.PTHS_DIR)
+
+        self.pths_datetime_dir = os.path.join(self.PTHS_DIR, now)
+        if not os.path.isdir(self.pths_datetime_dir):
+            os.mkdir(self.pths_datetime_dir)
+            
+    def _set_optimizers(self, generator: Generator, discriminator: Discriminator, learning_rate: float) -> None:
+        """Set optimizers
+
+        Args:
+            generator (Generator): Generator model
+            discriminator (Discriminator): Discriminator model
+        """
+
+        self.generator_optimizer = torch.optim.Adam(
+            generator.parameters(), lr=learning_rate, betas=self.BETAS
+        )
+        self.discriminator_optimizer = torch.optim.Adam(
+            discriminator.parameters(), lr=learning_rate, betas=self.BETAS
+        )
+
+    def _set_weights(self, generator: Generator, discriminator: Discriminator, apply_weights: str) -> None:
+        """Set weights by `apply_weights` key
+
+        Args:
+            generator (Generator): Generator model
+            discriminator (Discriminator): Discriminator model
+            apply_weights (str): Weights key to set
+        """
 
         if apply_weights == self.XAVIER:
-            self.generator.apply(self.initialize_weights_xavier)
-            self.discriminator.apply(self.initialize_weights_xavier)
+            generator.apply(self.initialize_weights_xavier)
+            discriminator.apply(self.initialize_weights_xavier)
         elif apply_weights == self.HE:
-            self.generator.apply(self.initialize_weights_he)
-            self.discriminator.apply(self.initialize_weights_he)
+            generator.apply(self.initialize_weights_he)
+            discriminator.apply(self.initialize_weights_he)
         
-        self.generator_optimizer = torch.optim.Adam(
-            self.generator.parameters(), lr=self.learning_rate
-        )
+    def _get_noise(self, size: Tuple[int] = (Config.BATCH_SIZE, Config.Z_DIM, 1, 1, 1)) -> torch.tensor:
+        """Create noise to generate `fake_data`
+
+        Args:
+            size (Tuple[int], optional): Size to make `noise`. Defaults to (Config.BATCH_SIZE, Config.Z_DIM, 1, 1, 1).
+
+        Returns:
+            torch.tensor: noise
+        """
         
-        self.discriminator_optimizer = torch.optim.Adam(
-            self.discriminator.parameters(), lr=self.learning_rate
-        )
-        
-    def _get_noise(self, size: Tuple[int] = (Config.BATCH_SIZE, Config.Z_DIM, 1, 1, 1)):
         return torch.randn(size).to(self.DEVICE)
+    
+    def _compute_gradient_penalty_1(self, real_data: torch.Tensor, fake_data: torch.Tensor) -> torch.Tensor:
+        """Compute the gradient penalty to enforce the Lipschitz constraint.
+        
+        Args:
+            real_data (torch.Tensor): A batch of real data.
+            fake_data (torch.Tensor): A batch of generated data.
+            
+        Returns:
+            torch.Tensor: The computed gradient penalty.
+        """
+        
+        batch_size, *_ = real_data.size()
+        alpha = torch.rand((batch_size, 1, 1, 1, 1)).to(self.DEVICE)
+
+        interpolated = (alpha * real_data + ((1 - alpha) * fake_data)).requires_grad_(True).to(self.DEVICE)
+
+        # Get the discriminator output for the interpolated data
+        d_interpolated = self.discriminator(interpolated)
+
+        # Get the gradients w.r.t. the interpolated data
+        gradients = torch.autograd.grad(
+            outputs=d_interpolated,
+            inputs=interpolated,
+            grad_outputs=torch.ones_like(d_interpolated).to(self.DEVICE),
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True,
+        )[0]
+
+        # Compute the gradient penalty
+        gradients = gradients.view(batch_size, -1)
+        gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
+        gradient_penalty = self.LAMBDA_1 * ((gradients_norm - 1) ** 2).mean()
+
+        return gradient_penalty
+    
+    def _compute_gradient_penalty_2(self, real_data: torch.Tensor, fake_data: torch.Tensor) -> torch.Tensor:
+        """Compute the gradient penalty to enforce the Lipschitz constraint.
+        
+        Args:
+            real_data (torch.Tensor): A batch of real data.
+            fake_data (torch.Tensor): A batch of generated data.
+            
+        Returns:
+            torch.Tensor: The computed gradient penalty.
+        """
+
+        alpha = torch.rand(1, 1)
+        alpha = alpha.expand(real_data.size())
+        alpha = alpha.to(self.DEVICE) 
+
+        interpolates = alpha * real_data + ((1 - alpha) * fake_data)
+
+        interpolates = interpolates.to(self.DEVICE)
+        interpolates = torch.autograd.Variable(interpolates, requires_grad=True)
+
+        disc_interpolates = self.discriminator(interpolates)
+
+        gradients = torch.autograd.grad(
+            outputs=disc_interpolates, 
+            inputs=interpolates,
+            grad_outputs=torch.ones(disc_interpolates.size()).to(self.DEVICE),
+            create_graph=True, 
+            retain_graph=True, 
+            only_inputs=True
+        )[0]
+        
+        gradient_penalty = self.LAMBDA_2((gradients.norm(2, dim=1) - 1) ** 2).mean() # average over sptial dimensions
+
+        return gradient_penalty
         
     def _train_discriminator(self, real_data: torch.tensor) -> torch.tensor:
+        """Train discriminator
+
+        Args:
+            real_data (torch.tensor): data
+
+        Returns:
+            torch.tensor: Discriminator loss
+        """
+
         noise = self._get_noise()
-        fake_mass = self.generator(noise)
+        fake_data = self.generator(noise)
         
         real_d = self.discriminator(real_data.unsqueeze(1))
-        fake_d = self.discriminator(fake_mass)
+        fake_d = self.discriminator(fake_data)
 
         loss_real_d = self.loss_function(real_d, torch.ones_like(real_d))
         loss_fake_d = self.loss_function(fake_d, torch.zeros_like(fake_d))
-        loss_d = loss_real_d + loss_fake_d
+        
+        gradient_penalty = self._compute_gradient_penalty_1(real_data.unsqueeze(1), fake_data)
+
+        loss_d = loss_fake_d + loss_real_d + gradient_penalty
         
         self.discriminator.zero_grad()
         loss_d.backward()
@@ -205,10 +326,16 @@ class MassGANTrainer(Config, WeightsInitializer):
         return loss_d
         
     def _train_generator(self) -> torch.tensor:
+        """Train generator
+
+        Returns:
+            torch.tensor: Generator loss
+        """
+
         noise = self._get_noise()
-        fake_mass = self.generator(noise)
+        fake_data = self.generator(noise)
         
-        fake_d = self.discriminator(fake_mass)
+        fake_d = self.discriminator(fake_data)
         
         loss_g = self.loss_function(fake_d, torch.ones_like(fake_d))
         
@@ -218,7 +345,16 @@ class MassGANTrainer(Config, WeightsInitializer):
         
         return loss_g
     
-    def _evaluate(self, evaluate_batch_size: int, epoch : int, save_npy: bool = False, plot_voxels=False) -> None:
+    def _evaluate(self, evaluate_batch_size: int, epoch : int, save_npy: bool = False, plot_voxels: bool = False) -> None:
+        """Evaluate, save and plot generated masses
+
+        Args:
+            evaluate_batch_size (int): Batch size to generate masses
+            epoch (int): Current epoch
+            save_npy (bool, optional): Whether saving to npy. Defaults to False.
+            plot_voxels (bool, optional): Whether plotting voxel or scatter. Defaults to False.
+        """
+
         self.generator.eval()
         self.discriminator.eval()
                 
@@ -235,14 +371,16 @@ class MassGANTrainer(Config, WeightsInitializer):
 
         self.generator.train()
         self.discriminator.train()
-        
     
     def train(self) -> None:
+        """Main function to train models
+        """
+        
         losses_g = []
         losses_d = []
 
-        scheduler_g = torch.optim.lr_scheduler.ReduceLROnPlateau(self.generator_optimizer, patience=5, factor=0.1)
-        scheduler_d = torch.optim.lr_scheduler.ReduceLROnPlateau(self.discriminator_optimizer, patience=5, factor=0.1)
+        # scheduler_g = torch.optim.lr_scheduler.ReduceLROnPlateau(self.generator_optimizer, patience=5, factor=0.1)
+        # scheduler_d = torch.optim.lr_scheduler.ReduceLROnPlateau(self.discriminator_optimizer, patience=5, factor=0.1)
         
         for epoch in range(1, self.epochs + 1):
             
@@ -262,22 +400,19 @@ class MassGANTrainer(Config, WeightsInitializer):
             losses_g.append(avg_loss_g)
             losses_d.append(avg_loss_d)
             
-            scheduler_g.step(avg_loss_g)
-            scheduler_d.step(avg_loss_d)
+            # scheduler_g.step(avg_loss_g)
+            # scheduler_d.step(avg_loss_d)
             
-            print(
-                f""""--------------------{epoch}/{self.epochs} Loss status:
-                loss g: {avg_loss_g.item()}
-                loss d: {avg_loss_d.item()}
-                """
-                )
-            
-            self._evaluate(evaluate_batch_size=self.BATCH_SIZE_TO_EVALUATE, epoch=epoch, save_npy=True, plot_voxels=True)
+            print(f"{epoch}/{self.epochs} Loss status:")
+            print(f"  loss g: {avg_loss_g.item()}")
+            print(f"  loss d: {avg_loss_d.item()}")
                 
             if epoch % self.LOG_INTERVAL == 0:
+                self._evaluate(evaluate_batch_size=self.BATCH_SIZE_TO_EVALUATE, epoch=epoch, save_npy=True, plot_voxels=True)
+                
                 print(f"pth saving at {epoch}/{self.epochs}")
-                torch.save(self.generator.state_dict(), os.path.join(self.PTHS_DIR, f"generator_epoch_{epoch}.pth"))
-                torch.save(self.discriminator.state_dict(), os.path.join(self.PTHS_DIR, f"discriminator_epoch_{epoch}.pth"))
+                torch.save(self.generator.state_dict(), os.path.join(self.pths_datetime_dir, f"generator_epoch_{epoch}.pth"))
+                torch.save(self.discriminator.state_dict(), os.path.join(self.pths_datetime_dir, f"discriminator_epoch_{epoch}.pth"))
 
             print(f"epoch: {epoch}/{self.epochs} terminating --------------------")
             print()
