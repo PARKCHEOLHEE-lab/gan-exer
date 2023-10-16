@@ -17,9 +17,9 @@ class ModelConfig:
     GENERATOR_INIT_OUT_CHANNELS = 256
     DISCRIMINATOR_INIT_OUT_CHANNELS = 64
     
-    EPOCHS = 500
-    LEARNING_RATE = 0.0002
-    BATCH_SIZE = 64
+    EPOCHS = 1000
+    LEARNING_RATE = 0.0001
+    BATCH_SIZE = 32
     BATCH_SIZE_TO_EVALUATE = 7
     Z_DIM = 128
     BETAS = (0.5, 0.999)
@@ -33,6 +33,7 @@ class ModelConfig:
     HE = "he"
     
     PTHS_DIR = "pths"
+    IMGS_DIR = "imgs"
     
     @staticmethod
     def set_seed(seed: int = SEED):

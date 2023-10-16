@@ -1,6 +1,6 @@
 import os
 import datetime
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -146,20 +146,33 @@ class MassGANTrainer(Config, WeightsInitializer):
         loss_function: _Loss, 
         learning_rate: float,
         seed: int,
-        apply_weights: str,
+        initial_weights_key: str = None,
+        generator_pth: str = None,
+        discriminator_pth: str = None,
     ):  
-        self.set_seed(seed)
-        
-        self._make_dirs()
-        self._set_optimizers(generator, discriminator, learning_rate)
-        self._set_weights(generator, discriminator, apply_weights)
-        
         self.generator = generator
         self.discriminator = discriminator
         self.dataloader = dataloader
         self.epochs = epochs
         self.loss_function = loss_function
         self.learning_rate = learning_rate
+        self.initial_weights_key = initial_weights_key
+        
+        self.generator_pth = generator_pth
+        self.discriminator_pth = discriminator_pth
+
+        self.set_seed(seed)
+        self._make_dirs()
+        
+        if self.initial_weights_key is not None:
+            self._set_initial_weights()
+        
+        if self.generator_pth is not None:
+            self._set_weights_from_pth(model=self.generator, pth_path=self.generator_pth)
+        if self.discriminator_pth is not None:
+            self._set_weights_from_pth(model=self.discriminator, pth_path=self.discriminator_pth)
+            
+        self._set_optimizers()
         
     def _make_dirs(self) -> None:
         """Make directories to save
@@ -182,7 +195,7 @@ class MassGANTrainer(Config, WeightsInitializer):
         if not os.path.isdir(self.pths_datetime_dir):
             os.mkdir(self.pths_datetime_dir)
             
-    def _set_optimizers(self, generator: Generator, discriminator: Discriminator, learning_rate: float) -> None:
+    def _set_optimizers(self) -> None:
         """Set optimizers
 
         Args:
@@ -191,27 +204,37 @@ class MassGANTrainer(Config, WeightsInitializer):
         """
 
         self.generator_optimizer = torch.optim.Adam(
-            generator.parameters(), lr=learning_rate, betas=self.BETAS
+            self.generator.parameters(), lr=self.learning_rate, betas=self.BETAS
         )
         self.discriminator_optimizer = torch.optim.Adam(
-            discriminator.parameters(), lr=learning_rate, betas=self.BETAS
+            self.discriminator.parameters(), lr=self.learning_rate, betas=self.BETAS
         )
 
-    def _set_weights(self, generator: Generator, discriminator: Discriminator, apply_weights: str) -> None:
-        """Set weights by `apply_weights` key
+    def _set_initial_weights(self) -> None:
+        """Set weights by `initial_weights_key` key
 
         Args:
             generator (Generator): Generator model
             discriminator (Discriminator): Discriminator model
-            apply_weights (str): Weights key to set
+            initial_weights_key (str): Weights key to set
         """
 
-        if apply_weights == self.XAVIER:
-            generator.apply(self.initialize_weights_xavier)
-            discriminator.apply(self.initialize_weights_xavier)
-        elif apply_weights == self.HE:
-            generator.apply(self.initialize_weights_he)
-            discriminator.apply(self.initialize_weights_he)
+        if self.initial_weights_key == self.XAVIER:
+            self.generator.apply(self.initialize_weights_xavier)
+            self.discriminator.apply(self.initialize_weights_xavier)
+        elif self.initial_weights_key == self.HE:
+            self.generator.apply(self.initialize_weights_he)
+            self.discriminator.apply(self.initialize_weights_he)
+            
+    def _set_weights_from_pth(self, model: Union[Generator, Discriminator], pth_path: str) -> None:
+        """Set weights from .pth file
+
+        Args:
+            model (Union[Generator, Discriminator]): Model to set
+            pth_path (str): pth file path
+        """
+        
+        model.load_state_dict(torch.load(pth_path, map_location=torch.device(self.DEVICE)))
         
     def _get_noise(self, size: Tuple[int] = (Config.BATCH_SIZE, Config.Z_DIM, 1, 1, 1)) -> torch.tensor:
         """Create noise to generate `fake_data`
@@ -345,7 +368,14 @@ class MassGANTrainer(Config, WeightsInitializer):
         
         return loss_g
     
-    def _evaluate(self, evaluate_batch_size: int, epoch : int, save_npy: bool = False, plot_voxels: bool = False) -> None:
+    def _evaluate(
+        self, 
+        evaluate_batch_size: int, 
+        epoch : int, 
+        save_npy: bool = False, 
+        plot_voxels: bool = False, 
+        axis_off: bool = False
+    ) -> None:
         """Evaluate, save and plot generated masses
 
         Args:
@@ -367,7 +397,11 @@ class MassGANTrainer(Config, WeightsInitializer):
                 np.save(npy_save_name, generated_binvox_mass)
 
             mass_data_list = [data.squeeze() for data in generated_binvox_mass]
-            Utils.plot_binvox(data_list=mass_data_list, plot_voxels=plot_voxels)
+            
+            img_save_path = self.IMGS_DIR + "/" + str(datetime.datetime.now()).replace(":", "-") + ".png"
+            Utils.plot_binvox(
+                data_list=mass_data_list, plot_voxels=plot_voxels, save_path=img_save_path, axis_off=axis_off
+            )
 
         self.generator.train()
         self.discriminator.train()
@@ -408,7 +442,13 @@ class MassGANTrainer(Config, WeightsInitializer):
             print(f"  loss d: {avg_loss_d.item()}")
                 
             if epoch % self.LOG_INTERVAL == 0:
-                self._evaluate(evaluate_batch_size=self.BATCH_SIZE_TO_EVALUATE, epoch=epoch, save_npy=True, plot_voxels=True)
+                self._evaluate(
+                    evaluate_batch_size=self.BATCH_SIZE_TO_EVALUATE, 
+                    epoch=epoch, 
+                    save_npy=True, 
+                    plot_voxels=True, 
+                    axis_off=True
+                )
                 
                 print(f"pth saving at {epoch}/{self.epochs}")
                 torch.save(self.generator.state_dict(), os.path.join(self.pths_datetime_dir, f"generator_epoch_{epoch}.pth"))

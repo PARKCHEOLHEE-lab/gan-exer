@@ -163,6 +163,8 @@ class Utils:
         downsample_rate: float = 1.0,
         title: str = "",
         figsize: Tuple[int] = None,
+        save_path: str = None,
+        axis_off: bool = False,
     ) -> None:
         """Plot .binvox data
 
@@ -188,6 +190,9 @@ class Utils:
         for n in range(1, data_list_length + 1):
             ax = figure.add_subplot(row, data_list_divider, n, projection="3d")
             
+            if axis_off:
+                ax.axis("off")
+
             data = data_list[n - 1]
             
             x, y, z = data.nonzero()
@@ -199,7 +204,11 @@ class Utils:
                 ax.scatter(x, y, z, c=color)
 
         ax.set_aspect("equal")
+        
         figure.tight_layout()
+        
+        if save_path is not None:
+            figure.savefig(save_path)
 
         plt.show()
 
