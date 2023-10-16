@@ -147,8 +147,7 @@ class MassGANTrainer(Config, WeightsInitializer):
         learning_rate: float,
         seed: int,
         initial_weights_key: str = None,
-        generator_pth: str = None,
-        discriminator_pth: str = None,
+        pths_dir: str = None,
     ):  
         self.generator = generator
         self.discriminator = discriminator
@@ -158,19 +157,33 @@ class MassGANTrainer(Config, WeightsInitializer):
         self.learning_rate = learning_rate
         self.initial_weights_key = initial_weights_key
         
-        self.generator_pth = generator_pth
-        self.discriminator_pth = discriminator_pth
+        self.pths_dir = pths_dir
 
         self.set_seed(seed)
         self._make_dirs()
         
         if self.initial_weights_key is not None:
             self._set_initial_weights()
-        
-        if self.generator_pth is not None:
-            self._set_weights_from_pth(model=self.generator, pth_path=self.generator_pth)
-        if self.discriminator_pth is not None:
-            self._set_weights_from_pth(model=self.discriminator, pth_path=self.discriminator_pth)
+            
+        if self.pths_dir is not None:
+            pth_folder_list = os.listdir(self.pths_dir)
+
+            if len(pth_folder_list) >= 2:
+                latest_pth_dir = self._get_latest_pth_dir(pth_folder_list)
+                discriminator_pth, generator_pth, *_ = sorted(
+                    os.listdir(latest_pth_dir), key=lambda pth: pth.replace(".pth", "").split("_")[-1], reverse=True
+                )
+                
+                generator_pth_path = os.path.join(latest_pth_dir, generator_pth)
+                discriminator_pth_path = os.path.join(latest_pth_dir, discriminator_pth)
+                
+                self._set_weights_from_pth(model=self.generator, pth_path=generator_pth_path)
+                self._set_weights_from_pth(model=self.discriminator, pth_path=discriminator_pth_path)
+
+                print()
+                print("Existing weights setting done!")
+                print(f"  generator_pth_path:     {generator_pth_path}")
+                print(f"  discriminator_pth_path: {discriminator_pth_path}")
             
         self._set_optimizers()
         
@@ -235,6 +248,16 @@ class MassGANTrainer(Config, WeightsInitializer):
         """
         
         model.load_state_dict(torch.load(pth_path, map_location=torch.device(self.DEVICE)))
+
+    def _get_latest_pth_dir(self, folder_list: List[str]) -> str:
+        sorted_folder = sorted(folder_list, reverse=True)
+        latest_pth_folder, *_ = sorted_folder
+        latest_pth_dir = os.path.join(self.pths_dir, latest_pth_folder)
+        
+        if len(os.listdir(latest_pth_dir)) == 0:
+            latest_pth_dir = self._get_latest_pth_dir(sorted_folder[1:])
+        
+        return latest_pth_dir
         
     def _get_noise(self, size: Tuple[int] = (Config.BATCH_SIZE, Config.Z_DIM, 1, 1, 1)) -> torch.tensor:
         """Create noise to generate `fake_data`
