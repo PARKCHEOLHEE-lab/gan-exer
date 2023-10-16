@@ -166,24 +166,7 @@ class MassGANTrainer(Config, WeightsInitializer):
             self._set_initial_weights()
             
         if self.pths_dir is not None:
-            pth_folder_list = os.listdir(self.pths_dir)
-
-            if len(pth_folder_list) >= 2:
-                latest_pth_dir = self._get_latest_pth_dir(pth_folder_list)
-                discriminator_pth, generator_pth, *_ = sorted(
-                    os.listdir(latest_pth_dir), key=lambda pth: pth.replace(".pth", "").split("_")[-1], reverse=True
-                )
-                
-                generator_pth_path = os.path.join(latest_pth_dir, generator_pth)
-                discriminator_pth_path = os.path.join(latest_pth_dir, discriminator_pth)
-                
-                self._set_weights_from_pth(model=self.generator, pth_path=generator_pth_path)
-                self._set_weights_from_pth(model=self.discriminator, pth_path=discriminator_pth_path)
-
-                print()
-                print("Existing weights setting done!")
-                print(f"  generator_pth_path:     {generator_pth_path}")
-                print(f"  discriminator_pth_path: {discriminator_pth_path}")
+            self._set_latest_pths()
             
         self._set_optimizers()
         
@@ -248,8 +231,42 @@ class MassGANTrainer(Config, WeightsInitializer):
         """
         
         model.load_state_dict(torch.load(pth_path, map_location=torch.device(self.DEVICE)))
+        
+    def _set_latest_pths(self) -> None:
+        """Set the latest weights to train
+        """
+        
+        pth_folder_list = os.listdir(self.pths_dir)
+
+        if len(pth_folder_list) >= 2:
+            latest_pth_dir = self._get_latest_pth_dir(pth_folder_list)
+            discriminator_pth, generator_pth, *_ = sorted(
+                os.listdir(latest_pth_dir), 
+                key=lambda pth: pth.replace(self.PTH_FORMAT, "").split("_")[-1], 
+                reverse=True
+            )
+            
+            generator_pth_path = os.path.join(latest_pth_dir, generator_pth)
+            discriminator_pth_path = os.path.join(latest_pth_dir, discriminator_pth)
+            
+            self._set_weights_from_pth(model=self.generator, pth_path=generator_pth_path)
+            self._set_weights_from_pth(model=self.discriminator, pth_path=discriminator_pth_path)
+
+            print()
+            print("Set initial weights from existing .pths:")
+            print(f"  generator_pth_path:     {generator_pth_path}")
+            print(f"  discriminator_pth_path: {discriminator_pth_path}")
 
     def _get_latest_pth_dir(self, folder_list: List[str]) -> str:
+        """Return a path where is latest pth directory
+
+        Args:
+            folder_list (List[str]): pths folder list
+
+        Returns:
+            str: latest pth directory path
+        """
+        
         sorted_folder = sorted(folder_list, reverse=True)
         latest_pth_folder, *_ = sorted_folder
         latest_pth_dir = os.path.join(self.pths_dir, latest_pth_folder)

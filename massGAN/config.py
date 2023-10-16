@@ -57,6 +57,7 @@ class PreprocessConfig:
         
     OBJ_FORMAT = ".obj"
     BINVOX_FORMAT = ".binvox"
+    PTH_FORMAT = ".pth"
     
     BINVOX_RESOLUTION = 128
 
