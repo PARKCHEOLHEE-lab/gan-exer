@@ -11,6 +11,7 @@ import numpy as np
 
 from utils import Utils
 from config import Config
+from IPython.display import clear_output
 
 
 class BinvoxDataset(Dataset, Config):
@@ -190,6 +191,9 @@ class MassGANTrainer(Config, WeightsInitializer):
         self.pths_datetime_dir = os.path.join(self.PTHS_DIR, now)
         if not os.path.isdir(self.pths_datetime_dir):
             os.mkdir(self.pths_datetime_dir)
+
+        if not os.path.isdir(self.IMGS_DIR):
+            os.mkdir(self.IMGS_DIR)
             
     def _set_optimizers(self) -> None:
         """Set optimizers
@@ -242,7 +246,7 @@ class MassGANTrainer(Config, WeightsInitializer):
             latest_pth_dir = self._get_latest_pth_dir(pth_folder_list)
             discriminator_pth, generator_pth, *_ = sorted(
                 os.listdir(latest_pth_dir), 
-                key=lambda pth: pth.replace(self.PTH_FORMAT, "").split("_")[-1], 
+                key=lambda pth: int(pth.replace(self.PTH_FORMAT, "").split("_")[-1]), 
                 reverse=True
             )
             
@@ -458,6 +462,9 @@ class MassGANTrainer(Config, WeightsInitializer):
         
         for epoch in range(1, self.epochs + 1):
             
+            if epoch % self.LOG_INTERVAL == 0:
+                clear_output(wait=True)
+            
             print(f"-------------------- epoch: {epoch}/{self.epochs} running")
             
             losses_g_per_epoch = []
@@ -496,5 +503,6 @@ class MassGANTrainer(Config, WeightsInitializer):
 
             print(f"epoch: {epoch}/{self.epochs} terminating --------------------")
             print()
+
             
                 
