@@ -1,6 +1,8 @@
 import os
 import datetime
 from typing import List, Tuple, Union
+from IPython.display import clear_output
+import tqdm
 
 import torch
 import torch.nn as nn
@@ -11,8 +13,6 @@ import numpy as np
 
 from utils import Utils
 from config import Config
-from IPython.display import clear_output
-
 
 class BinvoxDataset(Dataset, Config):
     def __init__(self, data_path):
@@ -469,8 +469,8 @@ class MassGANTrainer(Config, WeightsInitializer):
             
             losses_g_per_epoch = []
             losses_d_per_epoch = []
-            
-            for real_data in self.dataloader:
+        
+            for real_data in tqdm.tqdm(self.dataloader, desc="Batches", leave=False):
                 loss_d = self._train_discriminator(real_data=real_data)
                 loss_g = self._train_generator()
                 losses_g_per_epoch.append(loss_g.item())
@@ -488,7 +488,7 @@ class MassGANTrainer(Config, WeightsInitializer):
             print(f"  loss g: {avg_loss_g.item()}")
             print(f"  loss d: {avg_loss_d.item()}")
                 
-            if epoch % self.LOG_INTERVAL == 0:
+            if epoch == 1 or epoch % self.LOG_INTERVAL == 0:
                 self._evaluate(
                     evaluate_batch_size=self.BATCH_SIZE_TO_EVALUATE, 
                     epoch=epoch, 
@@ -498,10 +498,23 @@ class MassGANTrainer(Config, WeightsInitializer):
                 )
                 
                 print(f"pth saving at {epoch}/{self.epochs}")
-                torch.save(self.generator.state_dict(), os.path.join(self.pths_datetime_dir, f"generator_epoch_{epoch}.pth"))
-                torch.save(self.discriminator.state_dict(), os.path.join(self.pths_datetime_dir, f"discriminator_epoch_{epoch}.pth"))
+                
+                generator_save_path = os.path.join(self.pths_datetime_dir, f"generator_epoch_{epoch}.pth")
+                discriminator_save_path = os.path.join(self.pths_datetime_dir, f"discriminator_epoch_{epoch}.pth")
 
-            print(f"epoch: {epoch}/{self.epochs} terminating --------------------")
+                torch.save(self.generator.state_dict(), generator_save_path)
+                torch.save(self.discriminator.state_dict(), discriminator_save_path)
+
+                pths_list = os.listdir(self.pths_datetime_dir)
+                if len(pths_list) > 4:
+                    sorted_pths_list = sorted(
+                        pths_list, 
+                        key=lambda pth: int(pth.replace(self.PTH_FORMAT, "").split("_")[-1]), 
+                    )[:-4]
+                    
+                    for each_pth in sorted_pths_list:
+                        os.remove(os.path.join(self.pths_datetime_dir, each_pth))
+
             print()
 
             
