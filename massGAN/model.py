@@ -244,22 +244,24 @@ class MassGANTrainer(Config, WeightsInitializer):
 
         if len(pth_folder_list) >= 2:
             latest_pth_dir = self._get_latest_pth_dir(pth_folder_list)
-            discriminator_pth, generator_pth, *_ = sorted(
-                os.listdir(latest_pth_dir), 
-                key=lambda pth: int(pth.replace(self.PTH_FORMAT, "").split("_")[-1]), 
-                reverse=True
-            )
-            
-            generator_pth_path = os.path.join(latest_pth_dir, generator_pth)
-            discriminator_pth_path = os.path.join(latest_pth_dir, discriminator_pth)
-            
-            self._set_weights_from_pth(model=self.generator, pth_path=generator_pth_path)
-            self._set_weights_from_pth(model=self.discriminator, pth_path=discriminator_pth_path)
 
-            print()
-            print("Set initial weights from existing .pths:")
-            print(f"  generator_pth_path:     {generator_pth_path}")
-            print(f"  discriminator_pth_path: {discriminator_pth_path}")
+            if latest_pth_dir is not None:
+                discriminator_pth, generator_pth, *_ = sorted(
+                    os.listdir(latest_pth_dir), 
+                    key=lambda pth: int(pth.replace(self.PTH_FORMAT, "").split("_")[-1]), 
+                    reverse=True
+                )
+                
+                generator_pth_path = os.path.join(latest_pth_dir, generator_pth)
+                discriminator_pth_path = os.path.join(latest_pth_dir, discriminator_pth)
+                
+                self._set_weights_from_pth(model=self.generator, pth_path=generator_pth_path)
+                self._set_weights_from_pth(model=self.discriminator, pth_path=discriminator_pth_path)
+
+                print()
+                print("Set initial weights from existing .pths:")
+                print(f"  generator_pth_path:     {generator_pth_path}")
+                print(f"  discriminator_pth_path: {discriminator_pth_path}")
 
     def _get_latest_pth_dir(self, folder_list: List[str]) -> str:
         """Return a path where is latest pth directory
@@ -270,6 +272,9 @@ class MassGANTrainer(Config, WeightsInitializer):
         Returns:
             str: latest pth directory path
         """
+
+        if len(folder_list) == 0:
+            return None 
         
         sorted_folder = sorted(folder_list, reverse=True)
         latest_pth_folder, *_ = sorted_folder
