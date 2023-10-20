@@ -473,7 +473,7 @@ class MassGANTrainer(Config, WeightsInitializer):
             losses_g_per_epoch = []
             losses_d_per_epoch = []
         
-            for real_data in tqdm.tqdm(self.dataloader, desc=f"Batches in {epoch}/{self.epochs} epoch", leave=False):
+            for real_data in tqdm.tqdm(self.dataloader, desc=f"Batches in {epoch}/{self.epochs} epoch", leave=True):
                 loss_d = self._train_discriminator(real_data=real_data)
                 loss_g = self._train_generator()
                 losses_g_per_epoch.append(loss_g.item())
@@ -500,8 +500,6 @@ class MassGANTrainer(Config, WeightsInitializer):
                     plot_voxels=True, 
                     axis_off=True
                 )
-                
-                print(f"pth saving at {epoch}/{self.epochs}")
                 
                 generator_save_path = os.path.join(self.pths_datetime_dir, f"generator_epoch_{epoch}.pth")
                 discriminator_save_path = os.path.join(self.pths_datetime_dir, f"discriminator_epoch_{epoch}.pth")
