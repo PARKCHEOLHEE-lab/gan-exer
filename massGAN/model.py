@@ -470,12 +470,10 @@ class MassGANTrainer(Config, WeightsInitializer):
             if epoch % self.LOG_INTERVAL == 0:
                 clear_output(wait=True)
             
-            print(f"-------------------- epoch: {epoch}/{self.epochs} running")
-            
             losses_g_per_epoch = []
             losses_d_per_epoch = []
         
-            for real_data in tqdm.tqdm(self.dataloader, desc="Batches", leave=False):
+            for real_data in tqdm.tqdm(self.dataloader, desc=f"Batches in {epoch}/{self.epochs} epoch", leave=False):
                 loss_d = self._train_discriminator(real_data=real_data)
                 loss_g = self._train_generator()
                 losses_g_per_epoch.append(loss_g.item())
@@ -488,12 +486,13 @@ class MassGANTrainer(Config, WeightsInitializer):
             
             # scheduler_g.step(avg_loss_g)
             # scheduler_d.step(avg_loss_d)
-            
-            print(f"{epoch}/{self.epochs} Loss status:")
-            print(f"  loss g: {avg_loss_g.item()}")
-            print(f"  loss d: {avg_loss_d.item()}")
                 
             if epoch == 1 or epoch % self.LOG_INTERVAL == 0:
+                
+                print(f"{epoch}/{self.epochs} Loss status:")
+                print(f"  loss g: {avg_loss_g.item()}")
+                print(f"  loss d: {avg_loss_d.item()}")
+
                 self._evaluate(
                     evaluate_batch_size=self.BATCH_SIZE_TO_EVALUATE, 
                     epoch=epoch, 
