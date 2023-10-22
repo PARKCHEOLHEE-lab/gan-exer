@@ -1,3 +1,6 @@
 imgs/
 pths/
 data/generated
+data/augmented
+data/preprocessed
+pths_archived
