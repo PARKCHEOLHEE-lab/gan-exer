@@ -17,9 +17,9 @@ class ModelConfig:
     GENERATOR_INIT_OUT_CHANNELS = 256
     DISCRIMINATOR_INIT_OUT_CHANNELS = 64
     
-    EPOCHS = 5000
+    EPOCHS = 20000
     LEARNING_RATE = 0.0001
-    BATCH_SIZE = 32
+    BATCH_SIZE = 24
     BATCH_SIZE_TO_EVALUATE = 7
     Z_DIM = 128
     BETAS = (0.5, 0.999)
@@ -27,7 +27,7 @@ class ModelConfig:
     LAMBDA_1 = 10
     LAMBDA_2 = 1
     
-    LOG_INTERVAL = 10
+    LOG_INTERVAL = 100
     
     XAVIER = "xavier"
     HE = "he"

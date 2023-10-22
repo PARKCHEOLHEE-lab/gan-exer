@@ -487,7 +487,7 @@ class MassGANTrainer(Config, WeightsInitializer):
             # scheduler_g.step(avg_loss_g)
             # scheduler_d.step(avg_loss_d)
                 
-            if epoch == 1 or epoch % self.LOG_INTERVAL == 0:
+            if epoch % self.LOG_INTERVAL == 0:
                 
                 print(f"{epoch}/{self.epochs} Loss status:")
                 print(f"  loss g: {avg_loss_g.item()}")
