@@ -56,15 +56,15 @@ class PointSampler:
 
 class Normalize:
     def __call__(self, pointcloud):
-        assert len(pointcloud.shape)==2
+        assert len(pointcloud.shape) == 2
         
         norm_pointcloud = pointcloud - np.mean(pointcloud, axis=0) 
         norm_pointcloud /= np.max(np.linalg.norm(norm_pointcloud, axis=1))
 
-        return  norm_pointcloud
+        return norm_pointcloud
 
     
-def pcshow(*pcs, labels=None):
+def pcshow(*pcs, labels=None, axis_off=False, figsize=None):
     os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
 
     if labels is not None:
@@ -72,7 +72,10 @@ def pcshow(*pcs, labels=None):
             labels
         ), "The length between the given `args` and `labels` is different."
 
-    fig = plt.figure()
+    if figsize is None:
+        figsize = (6, 6)
+        
+    fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111, projection="3d")
 
     cmap = plt.get_cmap("plasma")
@@ -81,12 +84,21 @@ def pcshow(*pcs, labels=None):
 
     for i, point_cloud in enumerate(pcs):
         x, y, z = point_cloud.T
-        label = f"{labels[i]}" if labels is not None else f"point cloud {i + 1}"
-        ax.scatter(x, y, z, c=colors[i], marker="o", s=10, label=label)
+
+        if labels is not None:
+            ax.label(f"{labels[i]}")
+            
+        ax.scatter(x, y, z, c=colors[i], marker="o", s=10)
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
         ax.set_zlabel("Z")
 
-    ax.legend()
+    if labels is not None:
+        ax.legend()
+    
+    ax.set_aspect("equal")
+
+    if axis_off:
+        ax.axis("off")
 
     plt.show()
