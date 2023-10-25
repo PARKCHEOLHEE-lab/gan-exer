@@ -137,7 +137,7 @@ class Discriminator(nn.Module, Config):
         return self.main(x).view(-1, 1).squeeze(1)
     
 
-class MassGANTrainer(Config, WeightsInitializer):
+class MassganTrainer(Config, Utils, WeightsInitializer):
     def __init__(
         self, 
         generator: Generator,
@@ -148,6 +148,7 @@ class MassGANTrainer(Config, WeightsInitializer):
         learning_rate: float,
         seed: int,
         initial_weights_key: str = None,
+        use_lr_scheduler: bool = False,
         pths_dir: str = None,
     ):  
         self.generator = generator
@@ -157,6 +158,7 @@ class MassGANTrainer(Config, WeightsInitializer):
         self.loss_function = loss_function
         self.learning_rate = learning_rate
         self.initial_weights_key = initial_weights_key
+        self.use_lr_scheduler = use_lr_scheduler
         
         self.pths_dir = pths_dir
 
@@ -332,41 +334,6 @@ class MassGANTrainer(Config, WeightsInitializer):
         gradient_penalty = self.LAMBDA_1 * ((gradients_norm - 1) ** 2).mean()
 
         return gradient_penalty
-    
-    def _compute_gradient_penalty_2(self, real_data: torch.Tensor, fake_data: torch.Tensor) -> torch.Tensor:
-        """Compute the gradient penalty to enforce the Lipschitz constraint.
-        
-        Args:
-            real_data (torch.Tensor): A batch of real data.
-            fake_data (torch.Tensor): A batch of generated data.
-            
-        Returns:
-            torch.Tensor: The computed gradient penalty.
-        """
-
-        alpha = torch.rand(1, 1)
-        alpha = alpha.expand(real_data.size())
-        alpha = alpha.to(self.DEVICE) 
-
-        interpolates = alpha * real_data + ((1 - alpha) * fake_data)
-
-        interpolates = interpolates.to(self.DEVICE)
-        interpolates = torch.autograd.Variable(interpolates, requires_grad=True)
-
-        disc_interpolates = self.discriminator(interpolates)
-
-        gradients = torch.autograd.grad(
-            outputs=disc_interpolates, 
-            inputs=interpolates,
-            grad_outputs=torch.ones(disc_interpolates.size()).to(self.DEVICE),
-            create_graph=True, 
-            retain_graph=True, 
-            only_inputs=True
-        )[0]
-        
-        gradient_penalty = self.LAMBDA_2((gradients.norm(2, dim=1) - 1) ** 2).mean() # average over sptial dimensions
-
-        return gradient_penalty
         
     def _train_discriminator(self, real_data: torch.tensor) -> torch.tensor:
         """Train discriminator
@@ -388,10 +355,9 @@ class MassGANTrainer(Config, WeightsInitializer):
         loss_fake_d = self.loss_function(fake_d, torch.zeros_like(fake_d))
         
         gradient_penalty = self._compute_gradient_penalty_1(real_data.unsqueeze(1), fake_data)
-
         loss_d = loss_fake_d + loss_real_d + gradient_penalty
-        
-        self.discriminator.zero_grad()
+
+        self.discriminator_optimizer.zero_grad()
         loss_d.backward()
         self.discriminator_optimizer.step()
         
@@ -411,19 +377,21 @@ class MassGANTrainer(Config, WeightsInitializer):
         
         loss_g = self.loss_function(fake_d, torch.ones_like(fake_d))
         
-        self.generator.zero_grad()
+        self.generator_optimizer.zero_grad()
         loss_g.backward()
         self.generator_optimizer.step()
         
         return loss_g
     
-    def _evaluate(
+    def evaluate(
         self, 
         evaluate_batch_size: int, 
         epoch : int, 
         save_npy: bool = False, 
         plot_voxels: bool = False, 
-        axis_off: bool = False
+        axis_off: bool = False,
+        save_fig: bool = True,
+        figsize: Tuple[int] = None
     ) -> None:
         """Evaluate, save and plot generated masses
 
@@ -448,13 +416,17 @@ class MassGANTrainer(Config, WeightsInitializer):
             mass_data_list = [data.squeeze() for data in generated_binvox_mass]
             
             img_save_path = self.IMGS_DIR + "/" + str(datetime.datetime.now()).replace(":", "-") + ".png"
-            Utils.plot_binvox(
-                data_list=mass_data_list, plot_voxels=plot_voxels, save_path=img_save_path, axis_off=axis_off
+            self.plot_binvox(
+                data_list=mass_data_list, 
+                plot_voxels=plot_voxels, 
+                save_path=img_save_path if save_fig else None, 
+                axis_off=axis_off, 
+                figsize=figsize
             )
 
         self.generator.train()
         self.discriminator.train()
-    
+        
     def train(self) -> None:
         """Main function to train models
         """
@@ -462,8 +434,9 @@ class MassGANTrainer(Config, WeightsInitializer):
         losses_g = []
         losses_d = []
 
-        # scheduler_g = torch.optim.lr_scheduler.ReduceLROnPlateau(self.generator_optimizer, patience=5, factor=0.1)
-        # scheduler_d = torch.optim.lr_scheduler.ReduceLROnPlateau(self.discriminator_optimizer, patience=5, factor=0.1)
+        if self.use_lr_scheduler:
+            scheduler_g = torch.optim.lr_scheduler.ReduceLROnPlateau(self.generator_optimizer, patience=5, factor=0.1)
+            scheduler_d = torch.optim.lr_scheduler.ReduceLROnPlateau(self.discriminator_optimizer, patience=5, factor=0.1)
         
         for epoch in range(1, self.epochs + 1):
             
@@ -473,7 +446,7 @@ class MassGANTrainer(Config, WeightsInitializer):
             losses_g_per_epoch = []
             losses_d_per_epoch = []
         
-            for real_data in tqdm.tqdm(self.dataloader, desc=f"Batches in {epoch}/{self.epochs} epoch", leave=True):
+            for real_data in self.dataloader:
                 loss_d = self._train_discriminator(real_data=real_data)
                 loss_g = self._train_generator()
                 losses_g_per_epoch.append(loss_g.item())
@@ -484,22 +457,19 @@ class MassGANTrainer(Config, WeightsInitializer):
             losses_g.append(avg_loss_g)
             losses_d.append(avg_loss_d)
             
-            # scheduler_g.step(avg_loss_g)
-            # scheduler_d.step(avg_loss_d)
+            if self.use_lr_scheduler:
+                scheduler_g.step(avg_loss_g)
+                scheduler_d.step(avg_loss_d)
                 
             if epoch % self.LOG_INTERVAL == 0:
                 
-                print(f"{epoch}/{self.epochs} Loss status:")
-                print(f"  loss g: {avg_loss_g.item()}")
-                print(f"  loss d: {avg_loss_d.item()}")
-
-                self._evaluate(
+                self.evaluate(
                     evaluate_batch_size=self.BATCH_SIZE_TO_EVALUATE, 
                     epoch=epoch, 
                     save_npy=True, 
                     plot_voxels=True, 
-                    axis_off=True
-                )
+                    axis_off=True,
+                )                
                 
                 generator_save_path = os.path.join(self.pths_datetime_dir, f"generator_epoch_{epoch}.pth")
                 discriminator_save_path = os.path.join(self.pths_datetime_dir, f"discriminator_epoch_{epoch}.pth")
@@ -516,8 +486,6 @@ class MassGANTrainer(Config, WeightsInitializer):
                     
                     for each_pth in sorted_pths_list:
                         os.remove(os.path.join(self.pths_datetime_dir, each_pth))
-
-            print()
-
-            
+                        
+            self.plot_losses(losses_g=losses_g, losses_d=losses_d)
                 

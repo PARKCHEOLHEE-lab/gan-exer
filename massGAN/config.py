@@ -19,15 +19,14 @@ class ModelConfig:
     
     EPOCHS = 20000
     LEARNING_RATE = 0.0001
-    BATCH_SIZE = 24
-    BATCH_SIZE_TO_EVALUATE = 7
+    BATCH_SIZE = 6
+    BATCH_SIZE_TO_EVALUATE = 6
     Z_DIM = 128
     BETAS = (0.5, 0.999)
     
     LAMBDA_1 = 10
-    LAMBDA_2 = 1
     
-    LOG_INTERVAL = 100
+    LOG_INTERVAL = 200
     
     XAVIER = "xavier"
     HE = "he"
