@@ -64,7 +64,7 @@ class Normalize:
         return norm_pointcloud
 
     
-def pcshow(*pcs, labels=None, axis_off=False, figsize=None):
+def pcshow(*pcs, labels=None, axis_off=False, figsize=None, save_path=None):
     os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
 
     if labels is not None:
@@ -86,9 +86,9 @@ def pcshow(*pcs, labels=None, axis_off=False, figsize=None):
         x, y, z = point_cloud.T
 
         if labels is not None:
-            ax.label(f"{labels[i]}")
-            
-        ax.scatter(x, y, z, c=colors[i], marker="o", s=10)
+            ax.scatter(x, y, z, c=colors[i], marker="o", s=10, label=f"{labels[i]}")
+        else:
+            ax.scatter(x, y, z, c=colors[i], marker="o", s=10)
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
         ax.set_zlabel("Z")
@@ -100,5 +100,8 @@ def pcshow(*pcs, labels=None, axis_off=False, figsize=None):
 
     if axis_off:
         ax.axis("off")
+        
+    if save_path is not None:
+        fig.savefig(save_path)
 
     plt.show()
