@@ -2,11 +2,15 @@
 import cv2
 import numpy as np
 
+np.random.seed(0)
 
 class DataCreatorConfiguration:
     canvas_w_h = 700
     canvas_size = np.array([canvas_w_h, canvas_w_h])
     canvas_centroid = canvas_size / 2
+    
+    random_vertices_count_min = 5
+    random_vertices_count_max = 25
 
 
 class DataCreatorHelper(DataCreatorConfiguration):
@@ -43,14 +47,27 @@ class DataCreatorHelper(DataCreatorConfiguration):
 
         return coordinates.astype(np.int32)
     
-    def _get_random_coordinates(self):
-        
+    def _get_random_coordinates(self) -> np.ndarray:
+        """_summary_
+
+        Returns:
+            np.ndarray: _description_
+        """
     
-        vertices_count = np.random.randint(3, 50)
+        vertices_count = np.random.randint(self.random_vertices_count_min, self.random_vertices_count_max)
+        vertices = np.random.rand(vertices_count, 2)
+        vertices_centroid = np.mean(vertices, axis=0)
 
-        points = np.random.rand(vertices_count, 2)
+        # To get a non-intersected polygon, sort vertices to CCW
+        coordinates = sorted(
+            vertices, key=lambda p, c=vertices_centroid: np.arctan2(p[1] - c[1], p[0] - c[0])
+        )
 
+        return np.array(coordinates)
+    
+    def _get_largest_inscribed_rectangle(self):
         return
+
 
 class DataCreator(DataCreatorHelper):
     
@@ -60,11 +77,23 @@ class DataCreator(DataCreatorHelper):
         self.creation_count = creation_count
     
     def create(self):
+        
+        for _ in range(self.creation_count):
+            random_coordinates = self._get_random_coordinates()
+            fitted_coordinates = self._get_fitted_coordinates(random_coordinates)
+            # binary_grid_coordinates = ()
+            
+            # lir = self._get_largest_inscribed_rectangle(random_coordinates)
+
         return
 
 if __name__ == "__main__":
+
+    from debugvisualizer.debugvisualizer import Plotter
+    from shapely.geometry import Polygon, Point
     
-    data_creator = DataCreator(creation_count=1)
+    data_creator = DataCreator(creation_count=100)
+    data_creator.create()
     
     # polygon = np.array([[100, 100], [200, 200], [100, 200]])
 
