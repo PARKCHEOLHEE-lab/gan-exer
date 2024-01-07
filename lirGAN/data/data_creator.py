@@ -4,6 +4,11 @@ import numpy as np
 
 np.random.seed(0)
 
+
+class LargestInscribedRectangle:
+    def __init__(self, binary_grid_shaped_polygon: np.ndarray) -> None:
+        self.binary_grid_shaped_polygon = binary_grid_shaped_polygon
+
 class DataCreatorConfiguration:
     canvas_w_h = 700
     canvas_size = np.array([canvas_w_h, canvas_w_h])
@@ -17,6 +22,24 @@ class DataCreatorHelper(DataCreatorConfiguration):
 
     def __init__(self) -> None:
         DataCreatorConfiguration.__init__(self)
+    
+    def _get_random_coordinates(self) -> np.ndarray:
+        """_summary_
+
+        Returns:
+            np.ndarray: _description_
+        """
+    
+        vertices_count = np.random.randint(self.random_vertices_count_min, self.random_vertices_count_max)
+        vertices = np.random.rand(vertices_count, 2)
+        vertices_centroid = np.mean(vertices, axis=0)
+
+        # To get a non-intersected polygon, sort vertices to CCW
+        coordinates = sorted(
+            vertices, key=lambda p, c=vertices_centroid: np.arctan2(p[1] - c[1], p[0] - c[0])
+        )
+
+        return np.array(coordinates)
     
     def _get_fitted_coordinates(self, coordinates: np.ndarray) -> np.ndarray:
         """_summary_
@@ -47,25 +70,27 @@ class DataCreatorHelper(DataCreatorConfiguration):
 
         return coordinates.astype(np.int32)
     
-    def _get_random_coordinates(self) -> np.ndarray:
+    def _get_binary_grid_shaped_polygon(self, coordinates: np.ndarray) -> np.ndarray:
         """_summary_
+
+        Args:
+            coordinates (np.ndarray): _description_
 
         Returns:
             np.ndarray: _description_
         """
-    
-        vertices_count = np.random.randint(self.random_vertices_count_min, self.random_vertices_count_max)
-        vertices = np.random.rand(vertices_count, 2)
-        vertices_centroid = np.mean(vertices, axis=0)
+        
+        binary_grid_shaped_polygon = np.zeros(self.canvas_size, np.uint8)
+        cv2.fillPoly(binary_grid_shaped_polygon, [coordinates], 255)
 
-        # To get a non-intersected polygon, sort vertices to CCW
-        coordinates = sorted(
-            vertices, key=lambda p, c=vertices_centroid: np.arctan2(p[1] - c[1], p[0] - c[0])
-        )
+        binary_grid_shaped_polygon = (binary_grid_shaped_polygon == 255).astype(np.uint8)
 
-        return np.array(coordinates)
+        return binary_grid_shaped_polygon
     
-    def _get_largest_inscribed_rectangle(self):
+    def _get_largest_inscribed_rectangle(self, binary_grid_shaped_polygon: np.ndarray):
+        return
+    
+    def _get_vectorized_polygon_by_binary_grid(self, binary_grid_shaped_polygon: np.ndarray) -> np.ndarray:
         return
 
 
@@ -81,7 +106,7 @@ class DataCreator(DataCreatorHelper):
         for _ in range(self.creation_count):
             random_coordinates = self._get_random_coordinates()
             fitted_coordinates = self._get_fitted_coordinates(random_coordinates)
-            # binary_grid_coordinates = ()
+            binary_grid_shaped_polygon = self._get_binary_grid_shaped_polygon(fitted_coordinates)
             
             # lir = self._get_largest_inscribed_rectangle(random_coordinates)
 
