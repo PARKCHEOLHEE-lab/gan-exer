@@ -34,7 +34,6 @@ class DataCreatorHelper(DataCreatorConfiguration):
         vertices = np.random.rand(vertices_count, 2)
         vertices_centroid = np.mean(vertices, axis=0)
 
-        # To get a non-intersected polygon, sort vertices to CCW
         coordinates = sorted(
             vertices, key=lambda p, c=vertices_centroid: np.arctan2(p[1] - c[1], p[0] - c[0])
         )
