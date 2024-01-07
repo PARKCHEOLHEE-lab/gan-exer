@@ -1,13 +1,9 @@
 
 import cv2
 import numpy as np
+from lirGAN.data.largest_inscribed_rectangle import LargestInscribedRectangle
 
 np.random.seed(0)
-
-
-class LargestInscribedRectangle:
-    def __init__(self, binary_grid_shaped_polygon: np.ndarray) -> None:
-        self.binary_grid_shaped_polygon = binary_grid_shaped_polygon
 
 class DataCreatorConfiguration:
     canvas_w_h = 700
@@ -18,7 +14,7 @@ class DataCreatorConfiguration:
     random_vertices_count_max = 25
 
 
-class DataCreatorHelper(DataCreatorConfiguration):
+class DataCreatorHelper(DataCreatorConfiguration, LargestInscribedRectangle):
 
     def __init__(self) -> None:
         DataCreatorConfiguration.__init__(self)
@@ -86,9 +82,6 @@ class DataCreatorHelper(DataCreatorConfiguration):
 
         return binary_grid_shaped_polygon
     
-    def _get_largest_inscribed_rectangle(self, binary_grid_shaped_polygon: np.ndarray):
-        return
-    
     def _get_vectorized_polygon_by_binary_grid(self, binary_grid_shaped_polygon: np.ndarray) -> np.ndarray:
         return
 
@@ -105,9 +98,9 @@ class DataCreator(DataCreatorHelper):
         for _ in range(self.creation_count):
             random_coordinates = self._get_random_coordinates()
             fitted_coordinates = self._get_fitted_coordinates(random_coordinates)
+
             binary_grid_shaped_polygon = self._get_binary_grid_shaped_polygon(fitted_coordinates)
-            
-            # lir = self._get_largest_inscribed_rectangle(random_coordinates)
+            largest_incribed_rectangle = self._get_largest_inscribed_rectangle(binary_grid_shaped_polygon)
 
         return
 
