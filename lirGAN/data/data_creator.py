@@ -12,12 +12,35 @@ class DataCreatorConfiguration:
     
     random_vertices_count_min = 5
     random_vertices_count_max = 25
+    
+    lir_rotation_degree_interval = 1.0
 
 
 class DataCreatorHelper(DataCreatorConfiguration, LargestInscribedRectangle):
 
     def __init__(self) -> None:
         DataCreatorConfiguration.__init__(self)
+        LargestInscribedRectangle.__init__(self)
+        
+    def _get_rotation_matrix(self, degree: float) -> np.ndarray:
+        """_summary_
+
+        Args:
+            degree (float): _description_
+
+        Returns:
+            np.ndarray: _description_
+        """
+        
+        cos_angle = np.cos(np.radians(degree))
+        sin_angle = np.sin(np.radians(degree))
+        
+        return np.array(
+            [
+                [cos_angle, sin_angle],
+                [-sin_angle, cos_angle],
+            ]
+        )
     
     def _get_random_coordinates(self) -> np.ndarray:
         """_summary_
@@ -97,12 +120,50 @@ class DataCreator(DataCreatorHelper):
         
         for _ in range(self.creation_count):
             random_coordinates = self._get_random_coordinates()
-            fitted_coordinates = self._get_fitted_coordinates(random_coordinates)
+            
+            lir_args_list = []
+            rotation_degree = 0
 
-            binary_grid_shaped_polygon = self._get_binary_grid_shaped_polygon(fitted_coordinates)
-            largest_incribed_rectangle = self._get_largest_inscribed_rectangle(binary_grid_shaped_polygon)
+            while rotation_degree < 360:
+                
+                rotated_coordinates = random_coordinates @ self._get_rotation_matrix(rotation_degree)
+                fitted_coordinates = self._get_fitted_coordinates(rotated_coordinates)
+
+                binary_grid_shaped_polygon = self._get_binary_grid_shaped_polygon(fitted_coordinates)
+                
+                lir_args = [binary_grid_shaped_polygon, rotation_degree]
+                lir = self._get_each_lir(lir_args)
+                
+                # color_grid = cv2.cvtColor(lir.astype(np.float32), cv2.COLOR_GRAY2BGR)
+
+                # # Assign colors (here, white for 1, black for 0)
+                # color_grid[lir == 1] = [255, 255, 255]  # White
+                # color_grid[lir == 0] = [0, 0, 0]        # Black
+
+                # # Display the image
+                # cv2.imshow('Binary Grid', color_grid)
+                # cv2.waitKey(0)
+                # cv2.destroyAllWindows()
+
+                # lir_args = (binary_grid_shaped_polygon, )
+
+                # top_left, bottom_right = self._get_lir_indices(binary_grid_shaped_polygon)
+
+                # canvas = np.zeros((*binary_grid_shaped_polygon.shape, 3), dtype=np.uint8)
+                # cv2.polylines(canvas, [fitted_coordinates], 1, (0, 255, 0), 1)
+                # cv2.imshow("Polygon Grid", canvas)
+                # cv2.waitKey(0)
+                # cv2.destroyAllWindows()
+
+                rotation_degree += self.lir_rotation_degree_interval
+    
+    
+            
+
+            # largest_incribed_rectangle = self._get_largest_inscribed_rectangle(binary_grid_shaped_polygon, self.lir_rotation_interval)
 
         return
+
 
 if __name__ == "__main__":
 
@@ -111,18 +172,3 @@ if __name__ == "__main__":
     
     data_creator = DataCreator(creation_count=100)
     data_creator.create()
-    
-    # polygon = np.array([[100, 100], [200, 200], [100, 200]])
-
-    # centralized_polygon = data_creator._get_centralized_coordinates(polygon)    
-    # normalized_polygon = data_creator._get_normalized_coordinates(centralized_polygon)    
-
-    # # res = normalize_and_centralize_polygon(polygon, data_creator.canvas_size)
-
-    # canvas = np.zeros((data_creator.canvas_size[0], data_creator.canvas_size[1], 3), dtype=np.uint8)
-    
-    
-    # # cv2.polylines(canvas, [res], 1, (0, 255, 0), 3)
-    # # cv2.imshow("Polygon Grid", canvas)
-    # # cv2.waitKey(0)
-    # # cv2.destroyAllWindows()
