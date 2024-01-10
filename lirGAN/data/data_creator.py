@@ -107,6 +107,7 @@ class DataCreator(DataCreatorHelper):
         self.creation_count = creation_count
     
     def create(self):
+        import time
         
         for _ in range(self.creation_count):
             
@@ -117,6 +118,8 @@ class DataCreator(DataCreatorHelper):
                 canvas_size=self.canvas_size,
             )
             
+            a=1
+            
         return
 
 
@@ -125,5 +128,5 @@ if __name__ == "__main__":
     from debugvisualizer.debugvisualizer import Plotter
     from shapely.geometry import Polygon, Point
     
-    data_creator = DataCreator(creation_count=100, check_runtime=True)
+    data_creator = DataCreator(creation_count=1, check_runtime=True)
     data_creator.create()
