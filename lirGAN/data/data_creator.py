@@ -12,7 +12,7 @@ from shapely import affinity
 np.random.seed(0)
 
 class DataCreatorConfiguration:
-    canvas_w_h = 700
+    canvas_w_h = 500
     canvas_size = np.array([canvas_w_h, canvas_w_h])
     canvas_centroid = canvas_size / 2
     
@@ -107,7 +107,6 @@ class DataCreator(DataCreatorHelper):
         self.creation_count = creation_count
     
     def create(self):
-        import time
         
         for _ in range(self.creation_count):
             
