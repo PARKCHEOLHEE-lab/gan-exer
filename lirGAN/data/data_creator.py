@@ -118,11 +118,11 @@ class DataCreator(DataCreatorHelper):
         if not os.path.isdir(self.binpy_path):
             os.mkdir(self.binpy_path)
         
-        c = 0
-        while c < self.creation_count:
+        count = 0
+        while count < self.creation_count:
             
             try:
-                each_binpy_path = os.path.join(self.binpy_path, f"{c}.npy",)
+                each_binpy_path = os.path.join(self.binpy_path, f"{count}.npy",)
 
                 random_coordinates = self._get_fitted_coordinates(
                     self._get_random_coordinates(self.random_vertices_count_min, self.random_vertices_count_max), 
@@ -130,6 +130,7 @@ class DataCreator(DataCreatorHelper):
                 )
 
                 if os.path.isfile(each_binpy_path):
+                    count += 1
                     continue
                 
                 lir = self._get_largest_inscribed_rectangle(
@@ -149,7 +150,7 @@ class DataCreator(DataCreatorHelper):
                     each_binpy_path, np.array([binary_grid_shaped_polygon, binary_grid_shaped_lir])
                 )
                 
-                c += 1
+                count += 1
                 
             except Exception as e:
                 print(
