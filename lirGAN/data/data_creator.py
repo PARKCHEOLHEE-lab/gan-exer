@@ -118,34 +118,46 @@ class DataCreator(DataCreatorHelper):
         if not os.path.isdir(self.binpy_path):
             os.mkdir(self.binpy_path)
         
-        for c in range(self.creation_count):
+        c = 0
+        while c < self.creation_count:
             
-            each_binpy_path = os.path.join(self.binpy_path, f"{c}.npy",)
+            try:
+                each_binpy_path = os.path.join(self.binpy_path, f"{c}.npy",)
 
-            if os.path.isfile(each_binpy_path):
-                continue
+                random_coordinates = self._get_fitted_coordinates(
+                    self._get_random_coordinates(self.random_vertices_count_min, self.random_vertices_count_max), 
+                    self.canvas_size
+                )
 
-            random_coordinates = self._get_fitted_coordinates(
-                self._get_random_coordinates(self.random_vertices_count_min, self.random_vertices_count_max), 
-                self.canvas_size
-            )
-            
-            lir = self._get_largest_inscribed_rectangle(
-                coordinates=random_coordinates,
-                canvas_size=self.canvas_size,
-            )
-            
-            binary_grid_shaped_polygon = utils.get_binary_grid_shaped_polygon(
-                random_coordinates.astype(np.int32), self.canvas_size
-            )
+                if os.path.isfile(each_binpy_path):
+                    continue
+                
+                lir = self._get_largest_inscribed_rectangle(
+                    coordinates=random_coordinates,
+                    canvas_size=self.canvas_size,
+                )
+                
+                binary_grid_shaped_polygon = utils.get_binary_grid_shaped_polygon(
+                    random_coordinates.astype(np.int32), self.canvas_size
+                )
 
-            binary_grid_shaped_lir = utils.get_binary_grid_shaped_polygon(
-                np.array(lir.exterior.coords, dtype=np.int32), self.canvas_size
-            )
-            
-            np.save(
-                each_binpy_path, np.array([binary_grid_shaped_polygon, binary_grid_shaped_lir])
-            )
+                binary_grid_shaped_lir = utils.get_binary_grid_shaped_polygon(
+                    np.array(lir.exterior.coords, dtype=np.int32), self.canvas_size
+                )
+                
+                np.save(
+                    each_binpy_path, np.array([binary_grid_shaped_polygon, binary_grid_shaped_lir])
+                )
+                
+                c += 1
+                
+            except Exception as e:
+                print(
+                    f"""
+                    creation failure:
+                    {e}
+                    """
+                )
         
         print("creating done")
 
