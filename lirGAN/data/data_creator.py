@@ -14,7 +14,7 @@ class DataCreatorConfiguration:
     canvas_w_h = 500
     canvas_size = np.array([canvas_w_h, canvas_w_h])
     
-    random_vertices_count_min = 5
+    random_vertices_count_min = 3
     random_vertices_count_max = 25
     
     lir_rotation_degree_interval = 1.0
@@ -46,17 +46,19 @@ class DataCreatorHelper(DataCreatorConfiguration, LargestInscribedRectangle):
             ]
         )
     
-    def _get_random_coordinates(self, scale_factor: float = 1.0) -> np.ndarray:
+    def _get_random_coordinates(self, vertices_count_min: int, vertices_count_max: int, scale_factor: float = 1.0) -> np.ndarray:
         """Generate non-intersected polygon randomly 
 
         Args:
+            vertices_count_min (int): random vertices count minimum value 
+            vertices_count_max (int): random vertices count maximum value
             scale_factor (float, optional): constant to scale. Defaults to 1.0.
 
         Returns:
             np.ndarray: random coordinates
         """
     
-        vertices_count = np.random.randint(self.random_vertices_count_min, self.random_vertices_count_max)
+        vertices_count = np.random.randint(vertices_count_min, vertices_count_max)
         vertices = np.random.rand(vertices_count, 2)
         vertices_centroid = np.mean(vertices, axis=0)
 
@@ -124,7 +126,10 @@ class DataCreator(DataCreatorHelper):
             if os.path.isfile(each_binpy_path):
                 continue
 
-            random_coordinates = self._get_fitted_coordinates(self._get_random_coordinates(), self.canvas_size)
+            random_coordinates = self._get_fitted_coordinates(
+                self._get_random_coordinates(self.random_vertices_count_min, self.random_vertices_count_max), 
+                self.canvas_size
+            )
             
             lir = self._get_largest_inscribed_rectangle(
                 coordinates=random_coordinates,
