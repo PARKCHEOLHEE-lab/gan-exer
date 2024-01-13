@@ -9,8 +9,8 @@ from lirGAN.data import utils
 from debugvisualizer.debugvisualizer import Plotter
 
 class LargestInscribedRectangle:
-    def __init__(self, check_runtime: bool):
-        self.check_runtime = check_runtime
+    def __init__(self):
+        pass
         
     @staticmethod
     def _get_lir_indices(binary_grid_shaped_polygon: np.ndarray) -> Tuple[int, int]:

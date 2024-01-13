@@ -155,5 +155,5 @@ if __name__ == "__main__":
     from debugvisualizer.debugvisualizer import Plotter
     from shapely.geometry import Polygon, Point
     
-    data_creator = DataCreator(creation_count=10, check_runtime=True)
+    data_creator = DataCreator(creation_count=100)
     data_creator.create()
