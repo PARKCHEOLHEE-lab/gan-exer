@@ -1,6 +1,5 @@
 
 import os
-import cv2
 import ray
 import multiprocessing
 import numpy as np
@@ -147,6 +146,8 @@ class DataCreator(DataCreatorHelper):
             np.save(
                 each_binpy_path, np.array([binary_grid_shaped_polygon, binary_grid_shaped_lir])
             )
+        
+        print("creating done")
 
 
 
