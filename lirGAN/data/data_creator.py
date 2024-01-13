@@ -22,9 +22,9 @@ class DataCreatorConfiguration:
 
 class DataCreatorHelper(DataCreatorConfiguration, LargestInscribedRectangle):
 
-    def __init__(self, check_runtime: bool) -> None:
+    def __init__(self) -> None:
         DataCreatorConfiguration.__init__(self)
-        LargestInscribedRectangle.__init__(self, check_runtime)
+        LargestInscribedRectangle.__init__(self)
         
     def _get_rotation_matrix(self, degree: float) -> np.ndarray:
         """Get matrix to rotate by a given degree
@@ -104,8 +104,8 @@ class DataCreatorHelper(DataCreatorConfiguration, LargestInscribedRectangle):
 
 class DataCreator(DataCreatorHelper):
     
-    def __init__(self, creation_count: int, check_runtime: bool = False) -> None:
-        DataCreatorHelper.__init__(self, check_runtime)
+    def __init__(self, creation_count: int) -> None:
+        DataCreatorHelper.__init__(self)
 
         self.creation_count = creation_count
         self.binpy_path = os.path.abspath(os.path.join(__file__, "..", "binpy"))
