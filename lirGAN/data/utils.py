@@ -30,10 +30,13 @@ def vectorize_polygon_from_array(binary_grid: np.ndarray) -> np.ndarray:
     """Convert a binary grid-shaped polygon represented as a 2D array of 1s and 0s into a vectorized Numpy array.
 
     Args:
-        binary_grid: 2D Numpy array representing the binary image.
+        binary_grid (np.ndarray): 2D Numpy array representing the binary image.
+
+    Raises:
+        ValueError: occurs if there are no contours
 
     Returns:
-        Numpy array representing the vertices of the largest polygon.
+        np.ndarray: Numpy array representing the vertices of the largest polygon.
     """
 
     image = np.uint8(binary_grid * 255)
@@ -49,3 +52,38 @@ def vectorize_polygon_from_array(binary_grid: np.ndarray) -> np.ndarray:
     approx_polygon = cv2.approxPolyDP(polygon_contour, epsilon, True)
 
     return np.array(approx_polygon).squeeze()
+
+
+def get_binary_grid_shaped_polygon(coordinates: np.ndarray, canvas_size: np.ndarray) -> np.ndarray:
+    """Convert a given polygon coordinates to the binary grid-shaped polygon
+
+    Args:
+        coordinates (np.ndarray): polygon coordinates
+
+    Returns:
+        np.ndarray: binary grid
+    """
+    
+    binary_grid_shaped_polygon = np.zeros(canvas_size, np.uint8)
+    cv2.fillPoly(binary_grid_shaped_polygon, [coordinates], 255)
+
+    binary_grid_shaped_polygon = (binary_grid_shaped_polygon == 255).astype(np.uint8)
+
+    return binary_grid_shaped_polygon
+
+
+def visualize_binary_grid(binary_grid: np.ndarray) -> None:
+    """Shows binary grid by convert it to the binary image using OpencV
+
+    Args:
+        binary_grid (np.ndarray): binary grid
+    """
+    
+    color_grid = cv2.cvtColor(binary_grid.astype(np.float32), cv2.COLOR_GRAY2BGR)
+
+    color_grid[binary_grid == 1] = [255, 255, 255]  
+    color_grid[binary_grid == 0] = [0, 0, 0]        
+
+    cv2.imshow('Binary Grid', color_grid)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()

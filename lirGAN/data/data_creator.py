@@ -1,20 +1,18 @@
 
+import os
 import cv2
-import numpy as np
+import ray
 import multiprocessing
+import numpy as np
 
 from lirGAN.data.largest_inscribed_rectangle import LargestInscribedRectangle
 from lirGAN.data import utils
-
-from shapely.geometry import Polygon
-from shapely import affinity
 
 np.random.seed(0)
 
 class DataCreatorConfiguration:
     canvas_w_h = 500
     canvas_size = np.array([canvas_w_h, canvas_w_h])
-    canvas_centroid = canvas_size / 2
     
     random_vertices_count_min = 5
     random_vertices_count_max = 25
@@ -29,13 +27,13 @@ class DataCreatorHelper(DataCreatorConfiguration, LargestInscribedRectangle):
         LargestInscribedRectangle.__init__(self, check_runtime)
         
     def _get_rotation_matrix(self, degree: float) -> np.ndarray:
-        """_summary_
+        """Get matrix to rotate by a given degree
 
         Args:
-            degree (float): _description_
+            degree (float): degree to create a matrix
 
         Returns:
-            np.ndarray: _description_
+            np.ndarray: rotation matrix
         """
         
         cos_angle = np.cos(np.radians(degree))
@@ -49,10 +47,13 @@ class DataCreatorHelper(DataCreatorConfiguration, LargestInscribedRectangle):
         )
     
     def _get_random_coordinates(self, scale_factor: float = 1.0) -> np.ndarray:
-        """_summary_
+        """Generate non-intersected polygon randomly 
+
+        Args:
+            scale_factor (float, optional): constant to scale. Defaults to 1.0.
 
         Returns:
-            np.ndarray: _description_
+            np.ndarray: random coordinates
         """
     
         vertices_count = np.random.randint(self.random_vertices_count_min, self.random_vertices_count_max)
@@ -69,21 +70,21 @@ class DataCreatorHelper(DataCreatorConfiguration, LargestInscribedRectangle):
 
         return coordinates
     
-    def _get_fitted_coordinates(self, coordinates: np.ndarray) -> np.ndarray:
-        """_summary_
+    def _get_fitted_coordinates(self, coordinates: np.ndarray, canvas_size: np.ndarray) -> np.ndarray:
+        """Resize a given coordinates to the desired canvas size
 
         Args:
-            coordinates (np.ndarray): _description_
+            coordinates (np.ndarray): polygon coordinates to resize
 
         Returns:
-            np.ndarray: _description_
+            np.ndarray: fitted polygon coordinates
         """
         
         min_x, min_y = np.min(coordinates, axis=0)
         max_x, max_y = np.max(coordinates, axis=0)
 
-        scale_x = self.canvas_size[0] / (max_x - min_x)
-        scale_y = self.canvas_size[1] / (max_y - min_y)
+        scale_x = canvas_size[0] / (max_x - min_x)
+        scale_y = canvas_size[1] / (max_y - min_y)
         scale = min(scale_x, scale_y)
 
         coordinates = (coordinates - np.array([min_x, min_y])) * scale
@@ -91,8 +92,8 @@ class DataCreatorHelper(DataCreatorConfiguration, LargestInscribedRectangle):
         new_min_x, new_min_y = np.min(coordinates, axis=0)
         new_max_x, new_max_y = np.max(coordinates, axis=0)
 
-        offset_x = (self.canvas_size[0] - (new_max_x - new_min_x)) / 2 - new_min_x
-        offset_y = (self.canvas_size[1] - (new_max_y - new_min_y)) / 2 - new_min_y
+        offset_x = (canvas_size[0] - (new_max_x - new_min_x)) / 2 - new_min_x
+        offset_y = (canvas_size[1] - (new_max_y - new_min_y)) / 2 - new_min_y
 
         coordinates = coordinates + np.array([offset_x, offset_y])
 
@@ -105,21 +106,43 @@ class DataCreator(DataCreatorHelper):
         DataCreatorHelper.__init__(self, check_runtime)
 
         self.creation_count = creation_count
-    
-    def create(self):
+        self.binpy_path = os.path.abspath(os.path.join(__file__, "..", "binpy"))
+         
+    def create(self) -> None:
+        """Main function to create data for training
+        """
         
-        for _ in range(self.creation_count):
+        ray.init(num_cpus=multiprocessing.cpu_count())
             
-            random_coordinates = self._get_random_coordinates(scale_factor=self.canvas_w_h)
+        if not os.path.isdir(self.binpy_path):
+            os.mkdir(self.binpy_path)
+        
+        for c in range(self.creation_count):
+            
+            each_binpy_path = os.path.join(self.binpy_path, f"{c}.npy",)
+
+            if os.path.isfile(each_binpy_path):
+                continue
+
+            random_coordinates = self._get_fitted_coordinates(self._get_random_coordinates(), self.canvas_size)
             
             lir = self._get_largest_inscribed_rectangle(
-                random_coordinates=random_coordinates,
+                coordinates=random_coordinates,
                 canvas_size=self.canvas_size,
             )
             
-            a=1
+            binary_grid_shaped_polygon = utils.get_binary_grid_shaped_polygon(
+                random_coordinates.astype(np.int32), self.canvas_size
+            )
+
+            binary_grid_shaped_lir = utils.get_binary_grid_shaped_polygon(
+                np.array(lir.exterior.coords, dtype=np.int32), self.canvas_size
+            )
             
-        return
+            np.save(
+                each_binpy_path, np.array([binary_grid_shaped_polygon, binary_grid_shaped_lir])
+            )
+
 
 
 if __name__ == "__main__":
@@ -127,5 +150,5 @@ if __name__ == "__main__":
     from debugvisualizer.debugvisualizer import Plotter
     from shapely.geometry import Polygon, Point
     
-    data_creator = DataCreator(creation_count=1, check_runtime=True)
+    data_creator = DataCreator(creation_count=10, check_runtime=True)
     data_creator.create()
