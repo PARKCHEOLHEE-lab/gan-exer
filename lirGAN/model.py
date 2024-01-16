@@ -42,7 +42,7 @@ class LirDataset(Dataset, ModelConfig):
         
         return lir_dataset
 
-class LirGeometricalLoss(nn.Module):
+class LirGeometricLoss(nn.Module):
     def __init__(self, bce_weight, diou_weight, area_weight, feasibility_weight):
         super().__init__()
         
