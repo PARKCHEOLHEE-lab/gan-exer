@@ -43,7 +43,13 @@ class LirDataset(Dataset, ModelConfig):
         return lir_dataset
 
 class LirGeometricLoss(nn.Module):
-    def __init__(self, bce_weight, diou_weight, area_weight, feasibility_weight):
+    def __init__(
+        self, 
+        bce_weight: float = 1.0, 
+        diou_weight: float = 1.0, 
+        area_weight: float = 1.0, 
+        feasibility_weight: float = 1.0
+    ):
         super().__init__()
         
         self.bce_weight = bce_weight 
@@ -55,31 +61,79 @@ class LirGeometricLoss(nn.Module):
 
     @staticmethod
     def compute_diou_loss(generated_lir, target_lir, diou_weight):
-        intersection = torch.logical_and(generated_lir, target_lir)
-        union = torch.logical_or(generated_lir, target_lir)
-        iou_score = torch.sum(intersection).float() / torch.sum(union).float()
+        intersection = torch.logical_and(generated_lir, target_lir).float()
+        union = torch.logical_or(generated_lir, target_lir).float()
+        iou_score = torch.sum(intersection) / torch.sum(union)
+        
+        generated_lir_centroid = torch.nonzero(generated_lir).float().mean(dim=0)
+        target_lir_centroid = torch.nonzero(target_lir).float().mean(dim=0)
 
-        center_pred = torch.tensor([torch.mean(torch.nonzero(generated_lir, as_tuple=True)[i]) for i in range(2)])
-        center_target = torch.tensor([torch.mean(torch.nonzero(target_lir, as_tuple=True)[i]) for i in range(2)])
-        distance = torch.norm(center_pred - center_target, p=2)
+        distance = torch.norm(generated_lir_centroid - target_lir_centroid)
 
-        diagonal = torch.norm(torch.tensor(generated_lir.shape) - 1, p=2)
+        diagonal = torch.norm(torch.tensor(generated_lir.shape).float())
+
         normalized_distance = (distance / diagonal) ** 2
 
         diou = iou_score - normalized_distance
+        diou = (1 - diou) * diou_weight
 
-        return (1 - diou) * diou_weight
+        return diou
     
     @staticmethod
     def compute_area_loss(generated_lir, area_weight):
-        return
+        return -generated_lir.sum() * area_weight
     
     @staticmethod
-    def _compute_feasibility_loss(generated_lir, input_polygon, feasibility_weight):
-        return
+    def compute_feasibility_loss(input_polygon, generated_lir, feasibility_weight):
+        infeasibility_mask = (generated_lir == 1) & (input_polygon != 1)
+        feasibility_loss = infeasibility_mask.sum().float() / input_polygon.sum().float()
+        
+        return feasibility_loss * feasibility_weight
     
-    def forward(self):
+    def forward(self, input_polygons, generated_lirs, target_lirs):
         return
 
 if __name__ == "__main__":
     lir_dataset = LirDataset()
+    
+    lir_loss_function = LirGeometricLoss()
+    
+    input_polygon = torch.tensor(
+        [
+            [0, 0, 0, 1, 1, 0, 0],
+            [0, 0, 1, 1, 1, 1, 1],
+            [0, 1, 1, 1, 1, 1, 1],
+            [0, 0, 1, 1, 1, 1, 1],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 1, 1, 1, 1, 0],
+            [0, 0, 1, 1, 1, 1, 1],
+        ]
+    ).float()
+
+    generated_lir = torch.tensor(
+        [
+            [0, 0, 0, 0, 1, 1, 1],
+            [0, 0, 0, 0, 1, 1, 1],
+            [0, 0, 0, 0, 1, 1, 1],
+            [0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0],
+        ],
+    ).float()
+
+    target_lir = torch.tensor(
+        [
+            [0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0],
+            [0, 1, 1, 1, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0],
+        ],
+    ).float()
+    
+    lir_loss_function.compute_diou_loss(generated_lir, target_lir, 1.0)
+    lir_loss_function.compute_area_loss(generated_lir, 1.0)
+    lir_loss_function.compute_feasibility_loss(input_polygon, generated_lir, 1.0)
