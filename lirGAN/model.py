@@ -147,6 +147,17 @@ class LirGeometricLoss(nn.Module):
         return total_loss
     
 
+class LirGenerator(nn.Moudle):
+    def __init__(self):
+        super.__init__()
+        
+
+class LirDiscriminator(nn.Module):
+    def __init__(self):
+        super.__init__()
+    
+
+
 if __name__ == "__main__":
     lir_dataset = LirDataset()
     
