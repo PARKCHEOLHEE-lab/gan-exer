@@ -1,8 +1,10 @@
 import time
-from typing import Callable
-
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+
+from typing import Callable, List, Union
 
 
 def runtime_calculator(func: Callable) -> Callable:
@@ -72,18 +74,21 @@ def get_binary_grid_shaped_polygon(coordinates: np.ndarray, canvas_size: np.ndar
     return binary_grid_shaped_polygon
 
 
-def visualize_binary_grid(binary_grid: np.ndarray) -> None:
-    """Shows binary grid by convert it to the binary image using OpencV
+def visualize_binary_grid(binary_grid: np.ndarray, colormap: Union[List[str], str] = None) -> None:
+    """Shows binary grid by convert it to the binary image using matplotlib
 
     Args:
         binary_grid (np.ndarray): binary grid
+        colormap
     """
     
-    color_grid = cv2.cvtColor(binary_grid.astype(np.float32), cv2.COLOR_GRAY2BGR)
-
-    color_grid[binary_grid == 1] = [255, 255, 255]  
-    color_grid[binary_grid == 0] = [0, 0, 0]        
-
-    cv2.imshow('Binary Grid', color_grid)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    matplotlib_colormap = "Greys"
+    if colormap is not None:
+        if isinstance(colormap, list):
+            matplotlib_colormap = mcolors.ListedColormap(colormap)
+        elif isinstance(colormap, str):
+            matplotlib_colormap = colormap
+    
+    plt.imshow(binary_grid, cmap=matplotlib_colormap)
+    
+    plt.show()
