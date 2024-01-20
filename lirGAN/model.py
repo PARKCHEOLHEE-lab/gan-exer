@@ -4,33 +4,36 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from typing import List
+from typing import List, Tuple
 from lirGAN.config import ModelConfig
-from torch.utils.data import Dataset
+from lirGAN.data import utils
+from torch.utils.data import Dataset, DataLoader
 
 class LirDataset(Dataset, ModelConfig):
     def __init__(self, data_path: str = None):
-        self.lir_dataset: List[torch.tensor]
+        self.lir_dataset: List[torch.Tensor]
         self.lir_dataset = self._get_lir_dataset(self.DATA_PATH if data_path is None else data_path)
     
     def __len__(self) -> int:
         return len(self.lir_dataset)
     
-    def __getitem__(self, index) -> torch.tensor:
-        return self.lir_dataset[index].to(self.DEVICE)
+    def __getitem__(self, index) -> Tuple[torch.Tensor]:
+        input_polygon, target_rectangle = self.lir_dataset[index]
         
-    def _get_lir_dataset(self, data_path: str) -> List[torch.tensor]:
+        return input_polygon.to(self.DEVICE), target_rectangle.to(self.DEVICE)
+        
+    def _get_lir_dataset(self, data_path: str) -> List[torch.Tensor]:
         """Load the lir dataset
 
         Args:
             data_path (str): path to load data
 
         Returns:
-            List[torch.tensor]: Each tensor is (2, 500, 500)-shaped tensor. 
+            List[torch.Tensor]: Each tensor is (2, 500, 500)-shaped tensor. 
                                 The first one is the input polygon and the second one is ground-truth rectangle
         """
         
-        lir_dataset: List[torch.tensor]
+        lir_dataset: List[torch.Tensor]
         lir_dataset = []
         
         for file_name in os.listdir(data_path):
@@ -147,100 +150,31 @@ class LirGeometricLoss(nn.Module):
         return total_loss
     
 
-class LirGenerator(nn.Moudle):
+class LirGenerator(nn.Module, ModelConfig):
     def __init__(self):
         super().__init__()
         
-
-class LirDiscriminator(nn.Module):
+        self.main = nn.Sequential()
+        
+    def forward(self):
+        return
+    
+class LirDiscriminator(nn.Module, ModelConfig):
     def __init__(self):
         super().__init__()
+        
+        self.main = nn.Sequential()
 
-
-if __name__ == "__main__":
-    lir_dataset = LirDataset()
+    def forward(self):
+        return
     
-    lir_loss_function = LirGeometricLoss()
-    
-    input_polygons = torch.tensor(
-        [
-            [
-                [0, 0, 0, 1, 1, 0, 0],
-                [0, 0, 1, 1, 1, 1, 1],
-                [0, 1, 1, 1, 1, 1, 1],
-                [0, 0, 1, 1, 1, 1, 1],
-                [0, 0, 0, 1, 1, 1, 0],
-                [0, 0, 1, 1, 1, 1, 0],
-                [0, 0, 1, 1, 1, 1, 1],
-            ],
-            [
-                [0, 0, 0, 1, 1, 0, 0],
-                [0, 0, 1, 1, 1, 1, 1],
-                [0, 1, 1, 1, 1, 1, 1],
-                [0, 0, 1, 1, 1, 1, 1],
-                [0, 0, 0, 1, 1, 1, 0],
-                [0, 0, 1, 1, 1, 1, 0],
-                [0, 0, 1, 1, 1, 1, 1],
-            ],
-        ]
-    ).float()
-
-    generated_lirs = torch.tensor(
-        [
-            [
-                [0, 0, 0, 0, 1, 1, 1],
-                [0, 0, 0, 0, 1, 1, 1],
-                [0, 0, 0, 0, 1, 1, 1],
-                [0, 0, 0, 0, 1, 1, 1],
-                [0, 0, 0, 0, 1, 1, 1],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-            ],
-            [
-                [0, 0, 0, 0, 1, 1, 1],
-                [0, 0, 0, 0, 1, 1, 1],
-                [0, 0, 0, 0, 1, 1, 1],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-            ],
-        ],
-    ).float()
-
-    target_lirs = torch.tensor(
-        [
-            [
-                [0, 0, 0, 1, 1, 1, 1],
-                [0, 0, 0, 1, 1, 1, 1],
-                [0, 0, 0, 1, 1, 1, 1],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-            ],
-            [
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 1, 0, 0, 0, 0],
-                [0, 1, 1, 1, 0, 0, 0],
-                [1, 1, 1, 0, 0, 0, 0],
-                [0, 1, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-            ],
-        ],
-    ).float()
-    
-    loss_function = LirGeometricLoss(
-        bce_weight=1.0, 
-        diou_weight=1.0, 
-        area_weight=1.0, 
-        feasibility_weight=10.0
-    )
-
-    loss_function(
-        input_polygons=input_polygons, 
-        generated_lirs=generated_lirs, 
-        target_lirs=target_lirs
-    )
-    
+class LirGanTrainer(ModelConfig):
+    def __init__(
+        self, 
+        lir_generator: LirGenerator, 
+        lir_discriminator: LirDiscriminator,
+        lir_dataloader: DataLoader,
+    ):
+        self.lir_generator = lir_generator
+        self.lir_discriminator = lir_discriminator
+        self.lir_dataloader = lir_dataloader
