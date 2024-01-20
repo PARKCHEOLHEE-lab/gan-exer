@@ -18,9 +18,9 @@ class LirDataset(Dataset, ModelConfig):
         return len(self.lir_dataset)
     
     def __getitem__(self, index) -> Tuple[torch.Tensor]:
-        input_polygon, target_rectangle = self.lir_dataset[index]
+        input_polygon, target_lir = self.lir_dataset[index]
         
-        return input_polygon.to(self.DEVICE), target_rectangle.to(self.DEVICE)
+        return input_polygon.to(self.DEVICE), target_lir.to(self.DEVICE)
         
     def _get_lir_dataset(self, data_path: str) -> List[torch.Tensor]:
         """Load the lir dataset
@@ -39,7 +39,7 @@ class LirDataset(Dataset, ModelConfig):
         for file_name in os.listdir(data_path):
             lir_data_path = os.path.join(data_path, file_name)
             lir_dataset.append(
-                torch.tensor(np.load(lir_data_path), dtype=torch.float32)
+                torch.FloatTensor(np.load(lir_data_path))
             )
         
         return lir_dataset
@@ -154,10 +154,30 @@ class LirGenerator(nn.Module, ModelConfig):
     def __init__(self):
         super().__init__()
         
-        self.main = nn.Sequential()
+        self.main = nn.Sequential(
+            nn.Conv2d(1, 64, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ReLU(True),
+
+            nn.Conv2d(64, 32, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ReLU(True),
+
+            nn.Conv2d(32, 16, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ReLU(True),
+
+            nn.ConvTranspose2d(16, 32, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ReLU(True),
+
+            nn.ConvTranspose2d(32, 64, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ReLU(True),
+
+            nn.ConvTranspose2d(64, 1, kernel_size=8, stride=2, padding=1, bias=False),
+            nn.Sigmoid()
+        )
         
-    def forward(self):
-        return
+        self.main.to(self.DEVICE)
+        
+    def forward(self, input_polygon):
+        return self.main(input_polygon)
     
 class LirDiscriminator(nn.Module, ModelConfig):
     def __init__(self):
