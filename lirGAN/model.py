@@ -8,6 +8,7 @@ from typing import List, Tuple
 from lirGAN.config import ModelConfig
 from lirGAN.data import utils
 from torch.utils.data import Dataset, DataLoader
+from torch.nn.modules.loss import _Loss
 
 class LirDataset(Dataset, ModelConfig):
     def __init__(self, data_path: str = None):
@@ -39,7 +40,7 @@ class LirDataset(Dataset, ModelConfig):
         for file_name in os.listdir(data_path):
             lir_data_path = os.path.join(data_path, file_name)
             lir_dataset.append(
-                torch.FloatTensor(np.load(lir_data_path))
+                torch.tensor(np.load(lir_data_path), dtype=torch.float)
             )
         
         return lir_dataset
@@ -215,15 +216,81 @@ class LirDiscriminator(nn.Module, ModelConfig):
         self.main.to(self.DEVICE)
 
     def forward(self, generated_lir):
-        return self.main(generated_lir).squeeze()
+        return self.main(generated_lir).view(-1, 1).squeeze(1)
     
 class LirGanTrainer(ModelConfig):
     def __init__(
         self, 
         lir_generator: LirGenerator, 
+        lir_generator_loss_function: _Loss,
         lir_discriminator: LirDiscriminator,
+        lir_discriminator_loss_function: _Loss,
         lir_dataloader: DataLoader,
     ):
         self.lir_generator = lir_generator
+        self.lir_generator_loss_function = lir_generator_loss_function
         self.lir_discriminator = lir_discriminator
+        self.lir_discriminator_loss_function = lir_discriminator_loss_function
         self.lir_dataloader = lir_dataloader
+        
+        self._set_optimizers()
+            
+    def _set_optimizers(self) -> None:
+        """Set optimizers
+
+        Args:
+            generator (Generator): Generator model
+            discriminator (Discriminator): Discriminator model
+        """
+
+        self.lir_generator_optimizer = torch.optim.Adam(
+            self.lir_generator.parameters(), lr=self.LEARNING_RATE, betas=self.BETAS
+        )
+        self.lir_discriminator_optimizer = torch.optim.Adam(
+            self.lir_discriminator.parameters(), lr=self.LEARNING_RATE, betas=self.BETAS
+        )
+        
+    def _train_discriminator(self, input_polygon: torch.Tensor, target_lir: torch.Tensor):
+        """_summary_
+
+        Args:
+            input_polygon (torch.Tensor): _description_
+            target_lir (torch.Tensor): _description_
+
+        Returns:
+            _type_: _description_
+        """
+
+        generated_lir = self.lir_generator(input_polygon)
+
+        real_d = self.lir_discriminator(target_lir)
+        fake_d = self.lir_discriminator(generated_lir)
+        
+        loss_real_d = self.lir_discriminator_loss_function(real_d, torch.ones_like(real_d))
+        loss_fake_d = self.lir_discriminator_loss_function(fake_d, torch.zeros_like(fake_d))
+
+        loss_d = loss_real_d + loss_fake_d
+
+        self.lir_discriminator_optimizer.zero_grad()
+        loss_d.backward()
+        self.lir_discriminator_optimizer.step()
+        
+        return loss_d 
+        
+    def _train_generator(self, input_polygon: torch.Tensor, target_lir: torch.Tensor):
+
+        generated_lir = self.lir_generator(input_polygon)
+        
+        fake_d = self.lir_discriminator(generated_lir)
+        
+        adversarial_loss = self.lir_discriminator_loss_function(fake_d, torch.ones_like(fake_d))
+        geometric_loss = self.lir_generator_loss_function(input_polygon, generated_lir, target_lir)
+        
+        loss_g = adversarial_loss + geometric_loss
+        
+        self.lir_generator_optimizer.zero_grad()
+        loss_g.backward()
+        self.lir_generator_optimizer.step()
+    
+    def train(self):
+        pass

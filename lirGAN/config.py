@@ -33,4 +33,5 @@ class ModelConfig:
     
     EPOCHS = 1000    
     LEARNING_RATE = 0.0001
+    BETAS = (0.5, 0.999)
     BATCH_SIZE = 100
