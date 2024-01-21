@@ -20,7 +20,7 @@ class LirDataset(Dataset, ModelConfig):
     def __getitem__(self, index) -> Tuple[torch.Tensor]:
         input_polygon, target_lir = self.lir_dataset[index]
         
-        return input_polygon.to(self.DEVICE), target_lir.to(self.DEVICE)
+        return input_polygon.unsqueeze(dim=0).to(self.DEVICE), target_lir.unsqueeze(dim=0).to(self.DEVICE)
         
     def _get_lir_dataset(self, data_path: str) -> List[torch.Tensor]:
         """Load the lir dataset
@@ -156,18 +156,23 @@ class LirGenerator(nn.Module, ModelConfig):
         
         self.main = nn.Sequential(
             nn.Conv2d(1, 64, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(64),
             nn.ReLU(True),
 
             nn.Conv2d(64, 32, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
 
             nn.Conv2d(32, 16, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(16),
             nn.ReLU(True),
 
             nn.ConvTranspose2d(16, 32, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
 
             nn.ConvTranspose2d(32, 64, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(64),
             nn.ReLU(True),
 
             nn.ConvTranspose2d(64, 1, kernel_size=8, stride=2, padding=1, bias=False),
@@ -183,10 +188,34 @@ class LirDiscriminator(nn.Module, ModelConfig):
     def __init__(self):
         super().__init__()
         
-        self.main = nn.Sequential()
+        self.main = nn.Sequential(
+            nn.Conv2d(1, 64, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.2, inplace=True),
+            
+            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(256),
+            nn.LeakyReLU(0.2, inplace=True),
 
-    def forward(self):
-        return
+            nn.Conv2d(256, 512, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(512),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            nn.Conv2d(512, 512, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(512),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            nn.Conv2d(512, 1, kernel_size=15, stride=15, padding=0, bias=False),
+            nn.Sigmoid(),
+        )
+        
+        self.main.to(self.DEVICE)
+
+    def forward(self, generated_lir):
+        return self.main(generated_lir).squeeze()
     
 class LirGanTrainer(ModelConfig):
     def __init__(

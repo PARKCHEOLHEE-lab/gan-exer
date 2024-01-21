@@ -30,5 +30,7 @@ class ModelConfig:
         print(f"  Seeds set for torch on GPU : {torch.cuda.initial_seed()}")
         print(f"  Seeds set for numpy        : {seed}")
         print(f"  Seeds set for random       : {seed}")
-        
+    
+    EPOCHS = 1000    
+    LEARNING_RATE = 0.0001
     BATCH_SIZE = 100
