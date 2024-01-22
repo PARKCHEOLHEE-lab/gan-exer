@@ -222,7 +222,7 @@ class LirGanTrainer(ModelConfig):
     def __init__(
         self, 
         lir_generator: LirGenerator, 
-        lir_generator_loss_function: _Loss,
+        lir_generator_loss_function: LirGeometricLoss,
         lir_discriminator: LirDiscriminator,
         lir_discriminator_loss_function: _Loss,
         lir_dataloader: DataLoader,
@@ -233,22 +233,27 @@ class LirGanTrainer(ModelConfig):
         self.lir_discriminator_loss_function = lir_discriminator_loss_function
         self.lir_dataloader = lir_dataloader
         
-        self._set_optimizers()
+        self.lir_generator_optimizer, self.lir_discriminator_optimizer = self._get_optimizers(
+            self.lir_generator, self.lir_discriminator, self.LEARNING_RATE, self.BETAS
+        )
             
-    def _set_optimizers(self) -> None:
-        """Set optimizers
+    def _get_optimizers(
+        self, lir_generator: LirGenerator, lir_discriminator: LirDiscriminator, learning_rate: float, betas: Tuple[float]
+    ) -> Tuple[torch.optim.Optimizer, torch.optim.Optimizer]:
+        """Set and return optimizers
 
         Args:
-            generator (Generator): Generator model
-            discriminator (Discriminator): Discriminator model
+            lir_generator (LirGenerator): generator model
+            lir_discriminator (LirDiscriminator): discriminator model
+
+        Returns:
+            Tuple[torch.optim.Optimizer, torch.optim.Optimizer]: Optimizers
         """
 
-        self.lir_generator_optimizer = torch.optim.Adam(
-            self.lir_generator.parameters(), lr=self.LEARNING_RATE, betas=self.BETAS
-        )
-        self.lir_discriminator_optimizer = torch.optim.Adam(
-            self.lir_discriminator.parameters(), lr=self.LEARNING_RATE, betas=self.BETAS
-        )
+        lir_generator_optimizer = torch.optim.Adam(lir_generator.parameters(), lr=learning_rate, betas=betas)
+        lir_discriminator_optimizer = torch.optim.Adam(lir_discriminator.parameters(), lr=learning_rate, betas=betas)
+        
+        return lir_generator_optimizer, lir_discriminator_optimizer
         
     def _train_discriminator(self, input_polygon: torch.Tensor, target_lir: torch.Tensor):
         """_summary_
@@ -291,6 +296,12 @@ class LirGanTrainer(ModelConfig):
         self.lir_generator_optimizer.zero_grad()
         loss_g.backward()
         self.lir_generator_optimizer.step()
+        
+        return loss_g
     
     def train(self):
-        pass
+        """Main function to train models
+        """
+
+        for epoch in range(1, self.EPOCHS + 1):
+            break
