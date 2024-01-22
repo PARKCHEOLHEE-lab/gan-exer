@@ -199,10 +199,6 @@ class MassganTrainer(Config, Utils, WeightsInitializer):
             
     def _set_optimizers(self) -> None:
         """Set optimizers
-
-        Args:
-            generator (Generator): Generator model
-            discriminator (Discriminator): Discriminator model
         """
 
         self.generator_optimizer = torch.optim.Adam(
@@ -214,11 +210,6 @@ class MassganTrainer(Config, Utils, WeightsInitializer):
 
     def _set_initial_weights(self) -> None:
         """Set weights by `initial_weights_key` key
-
-        Args:
-            generator (Generator): Generator model
-            discriminator (Discriminator): Discriminator model
-            initial_weights_key (str): Weights key to set
         """
 
         if self.initial_weights_key == self.XAVIER:
