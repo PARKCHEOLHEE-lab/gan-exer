@@ -7,12 +7,15 @@ from typing import List, Tuple
 from lirGAN.config import ModelConfig
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.modules.loss import _Loss
+from IPython.display import clear_output
 
 
 class LirDataset(Dataset, ModelConfig):
-    def __init__(self, data_path: str = None):
+    def __init__(self, data_path: str = None, slicer: int = np.inf):
         self.lir_dataset: List[torch.Tensor]
-        self.lir_dataset = self._get_lir_dataset(self.DATA_PATH if data_path is None else data_path)
+        self.lir_dataset = self._get_lir_dataset(
+            data_path=self.DATA_PATH if data_path is None else data_path, slicer=slicer
+        )
 
     def __len__(self) -> int:
         return len(self.lir_dataset)
@@ -22,7 +25,7 @@ class LirDataset(Dataset, ModelConfig):
 
         return input_polygon.unsqueeze(dim=0).to(self.DEVICE), target_lir.unsqueeze(dim=0).to(self.DEVICE)
 
-    def _get_lir_dataset(self, data_path: str) -> List[torch.Tensor]:
+    def _get_lir_dataset(self, data_path: str, slicer: int) -> List[torch.Tensor]:
         """Load the lir dataset
 
         Args:
@@ -39,6 +42,9 @@ class LirDataset(Dataset, ModelConfig):
         for file_name in os.listdir(data_path):
             lir_data_path = os.path.join(data_path, file_name)
             lir_dataset.append(torch.tensor(np.load(lir_data_path), dtype=torch.float))
+
+        if slicer < np.inf:
+            return lir_dataset[:slicer]
 
         return lir_dataset
 
@@ -255,7 +261,7 @@ class LirGanTrainer(ModelConfig):
 
         return lir_generator_optimizer, lir_discriminator_optimizer
 
-    def _train_discriminator(self, input_polygon: torch.Tensor, target_lir: torch.Tensor):
+    def _train_lir_discriminator(self, input_polygons: torch.Tensor, target_lirs: torch.Tensor):
         """_summary_
 
         Args:
@@ -266,9 +272,9 @@ class LirGanTrainer(ModelConfig):
             _type_: _description_
         """
 
-        generated_lir = self.lir_generator(input_polygon)
+        generated_lir = self.lir_generator(input_polygons)
 
-        real_d = self.lir_discriminator(target_lir)
+        real_d = self.lir_discriminator(target_lirs)
         fake_d = self.lir_discriminator(generated_lir)
 
         loss_real_d = self.lir_discriminator_loss_function(real_d, torch.ones_like(real_d))
@@ -282,13 +288,13 @@ class LirGanTrainer(ModelConfig):
 
         return loss_d
 
-    def _train_generator(self, input_polygon: torch.Tensor, target_lir: torch.Tensor):
-        generated_lir = self.lir_generator(input_polygon)
+    def _train_lir_generator(self, input_polygons: torch.Tensor, target_lirs: torch.Tensor):
+        generated_lir = self.lir_generator(input_polygons)
 
         fake_d = self.lir_discriminator(generated_lir)
 
         adversarial_loss = self.lir_discriminator_loss_function(fake_d, torch.ones_like(fake_d))
-        geometric_loss = self.lir_generator_loss_function(input_polygon, generated_lir, target_lir)
+        geometric_loss = self.lir_generator_loss_function(input_polygons, generated_lir, target_lirs)
 
         loss_g = adversarial_loss + geometric_loss
 
@@ -298,8 +304,29 @@ class LirGanTrainer(ModelConfig):
 
         return loss_g
 
+    def evaluate(self):
+        pass
+
     def train(self):
         """Main function to train models"""
 
+        losses_g = []
+        losses_d = []
+
         for epoch in range(1, self.EPOCHS + 1):
-            break
+            if epoch % self.LOG_INTERVAL == 0:
+                clear_output(wait=True)
+
+            losses_g_per_epoch = []
+            losses_d_per_epoch = []
+
+            for input_polygons, target_lirs in self.lir_dataloader:
+                loss_d = self._train_lir_discriminator(input_polygons, target_lirs)
+                loss_g = self._train_lir_generator(input_polygons, target_lirs)
+                losses_g_per_epoch.append(loss_g.item())
+                losses_d_per_epoch.append(loss_d.item())
+
+            avg_loss_g = np.mean(losses_g_per_epoch)
+            avg_loss_d = np.mean(losses_d_per_epoch)
+            losses_g.append(avg_loss_g)
+            losses_d.append(avg_loss_d)
