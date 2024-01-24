@@ -5,35 +5,34 @@ import random
 
 
 class ModelConfig:
-    """Configuration related to the GAN models
-    """
+    """Configuration related to the GAN models"""
 
     DEVICE = "cpu"
     if torch.cuda.is_available():
         DEVICE = "cuda"
-        
+
     SEED = 777
-    
+
     GENERATOR_INIT_OUT_CHANNELS = 256
     DISCRIMINATOR_INIT_OUT_CHANNELS = 64
-    
+
     EPOCHS = 20000
     LEARNING_RATE = 0.0001
     BATCH_SIZE = 6
     BATCH_SIZE_TO_EVALUATE = 6
     Z_DIM = 128
     BETAS = (0.5, 0.999)
-    
+
     LAMBDA_1 = 10
-    
+
     LOG_INTERVAL = 200
-    
+
     XAVIER = "xavier"
     HE = "he"
-    
+
     PTHS_DIR = "pths"
     IMGS_DIR = "imgs"
-    
+
     @staticmethod
     def set_seed(seed: int = SEED):
         torch.manual_seed(seed)
@@ -43,21 +42,21 @@ class ModelConfig:
         torch.backends.cudnn.benchmark = False
         np.random.seed(seed)
         random.seed(seed)
-        
+
         print("Seeds status:")
         print(f"  Seeds set for torch        : {torch.initial_seed()}")
         print(f"  Seeds set for torch on GPU : {torch.cuda.initial_seed()}")
         print(f"  Seeds set for numpy        : {seed}")
         print(f"  Seeds set for random       : {seed}")
 
+
 class PreprocessConfig:
-    """Configuration related to the preprocessing data
-    """
-        
+    """Configuration related to the preprocessing data"""
+
     OBJ_FORMAT = ".obj"
     BINVOX_FORMAT = ".binvox"
     PTH_FORMAT = ".pth"
-    
+
     BINVOX_RESOLUTION = 128
 
     ROTATION_MAX = 360
@@ -75,8 +74,7 @@ class PreprocessConfig:
     DATA_ORIGINAL_DIR_MERGED = os.path.join(DATA_BASE_DIR, DATA_ORIGINAL_DIR)
     DATA_PREPROCESSED_DIR_MERGED = os.path.join(DATA_BASE_DIR, DATA_PREPROCESSED_DIR)
     DATA_GENERATED_DIR_MERGED = os.path.join(DATA_BASE_DIR, DATA_GENERATED_DIR)
-    
-    
+
+
 class Config(ModelConfig, PreprocessConfig):
-    """Wrapper class
-    """
+    """Wrapper class"""

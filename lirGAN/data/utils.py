@@ -16,7 +16,7 @@ def runtime_calculator(func: Callable) -> Callable:
     Returns:
         Callable: Decorator
     """
-    
+
     def wrapper(*args, **kwargs):
         start_time = time.time()
         result = func(*args, **kwargs)
@@ -24,7 +24,7 @@ def runtime_calculator(func: Callable) -> Callable:
         runtime = end_time - start_time
         print(f"The function {func.__name__} took {runtime} seconds to run.")
         return result
-    
+
     return wrapper
 
 
@@ -65,7 +65,7 @@ def get_binary_grid_shaped_polygon(coordinates: np.ndarray, canvas_size: np.ndar
     Returns:
         np.ndarray: binary grid
     """
-    
+
     binary_grid_shaped_polygon = np.zeros(canvas_size, np.uint8)
     cv2.fillPoly(binary_grid_shaped_polygon, [coordinates], 255)
 
@@ -81,14 +81,14 @@ def visualize_binary_grid(binary_grid: np.ndarray, colormap: Union[List[str], st
         binary_grid (np.ndarray): binary grid
         colormap
     """
-    
+
     matplotlib_colormap = "Greys"
     if colormap is not None:
         if isinstance(colormap, list):
             matplotlib_colormap = mcolors.ListedColormap(colormap)
         elif isinstance(colormap, str):
             matplotlib_colormap = colormap
-    
+
     plt.imshow(binary_grid, cmap=matplotlib_colormap)
-    
+
     plt.show()
