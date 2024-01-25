@@ -74,14 +74,18 @@ def get_binary_grid_shaped_polygon(coordinates: np.ndarray, canvas_size: np.ndar
     return binary_grid_shaped_polygon
 
 
-def visualize_binary_grid(binary_grid: np.ndarray, colormap: Union[List[str], str] = None) -> None:
-    """Shows binary grid by convert it to the binary image using matplotlib
+def visualize_binary_grids(binary_grids: List[np.ndarray], colormap: Union[List[str], str] = None) -> None:
+    """visualize multiple binary grids in a row
 
     Args:
-        binary_grid (np.ndarray): binary grid
-        colormap
+        binary_grids (List[np.ndarray]): list of binary grids
+        colormap (Union[List[str], str], optional): colormap to use for displaying the binary grids. Defaults to None.
     """
 
+    n = len(binary_grids)
+    _, axs = plt.subplots(1, n, figsize=(n * 5, 5))
+
+    # Handle colormap
     matplotlib_colormap = "Greys"
     if colormap is not None:
         if isinstance(colormap, list):
@@ -89,6 +93,12 @@ def visualize_binary_grid(binary_grid: np.ndarray, colormap: Union[List[str], st
         elif isinstance(colormap, str):
             matplotlib_colormap = colormap
 
-    plt.imshow(binary_grid, cmap=matplotlib_colormap)
+    for i, grid in enumerate(binary_grids):
+        if n == 1:
+            ax = axs
+        else:
+            ax = axs[i]
+        ax.imshow(grid, cmap=matplotlib_colormap)
+        ax.axis("off")
 
     plt.show()
