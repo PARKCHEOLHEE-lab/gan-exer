@@ -32,6 +32,11 @@ class ModelConfig:
         print(f"  Seeds set for random       : {seed}")
 
     EPOCHS = 1000
+    LOG_INTERVAL = 1
     LEARNING_RATE = 0.0001
     BETAS = (0.5, 0.999)
     BATCH_SIZE = 100
+    BATCH_SIZE_TO_EVALUATE = 10
+
+    XAVIER = "xavier"
+    HE = "he"
