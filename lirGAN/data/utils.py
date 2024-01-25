@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
 from typing import Callable, List, Union
+from IPython.display import clear_output
 
 
 def runtime_calculator(func: Callable) -> Callable:
@@ -102,3 +103,64 @@ def visualize_binary_grids(binary_grids: List[np.ndarray], colormap: Union[List[
         ax.axis("off")
 
     plt.show()
+
+
+def plot_losses(losses_g, losses_d, figsize=(10, 5), plot_avg_line=False):
+    """Visualizes the generator and discriminator losses,
+    draws a dashed line for average losses and annotates them."""
+
+    if len(losses_g) <= 1:
+        return
+
+    plt.figure(figsize=figsize)
+    plt.title(f"Generator and Discriminator Losses At {len(losses_g)} Epoch")
+
+    # Plot the losses
+    plt.plot(losses_g, label="Generator Loss", alpha=0.6)
+    plt.plot(losses_d, label="Discriminator Loss", alpha=0.6)
+
+    if plot_avg_line:
+        # Calculate and plot the average loss for generator
+        avg_loss_g = sum(losses_g) / len(losses_g)
+        plt.axhline(avg_loss_g, linestyle="--", color="red")
+        plt.annotate(
+            f"Avg Loss G: {avg_loss_g:.6f}",
+            xy=(len(losses_g) - 1, avg_loss_g),
+            xytext=(len(losses_g) - 1.5, avg_loss_g + 0.1),
+            color="red",
+        )
+
+        # Calculate and plot the average loss for discriminator
+        avg_loss_d = sum(losses_d) / len(losses_d)
+        plt.axhline(avg_loss_d, linestyle="--", color="green")
+        plt.annotate(
+            f"Avg Loss D: {avg_loss_d:.6f}",
+            xy=(len(losses_d) - 1, avg_loss_d),
+            xytext=(len(losses_d) - 1.5, avg_loss_d - 0.1),
+            color="green",
+        )
+
+    # Get the latest loss values
+    latest_loss_g = losses_g[-1]
+    latest_loss_d = losses_d[-1]
+
+    # Annotate the latest loss values on the plot
+    plt.annotate(
+        f"Loss G: {latest_loss_g:.6f}",
+        xy=(len(losses_g) - 1, latest_loss_g),
+        xytext=(len(losses_g) - 1.5, latest_loss_g + 0.1),
+    )
+
+    plt.annotate(
+        f"Loss D: {latest_loss_d:.6f}",
+        xy=(len(losses_d) - 1, latest_loss_d),
+        xytext=(len(losses_d) - 1.5, latest_loss_d - 0.1),
+    )
+
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+    plt.show()
+
+    clear_output(wait=True)

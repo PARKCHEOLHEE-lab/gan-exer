@@ -5,6 +5,8 @@ import numpy as np
 
 from typing import List, Tuple
 from lirGAN.config import ModelConfig
+from lirGAN.data.data_creator import DataCreator
+from lirGAN.data import utils
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.modules.loss import _Loss
 from IPython.display import clear_output
@@ -161,6 +163,28 @@ class LirGeometricLoss(nn.Module):
         return total_loss
 
 
+class WeightsInitializer:
+    @staticmethod
+    def initialize_weights_xavier(m):
+        if isinstance(m, (nn.Conv3d, nn.ConvTranspose3d)):
+            nn.init.xavier_normal_(m.weight)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.BatchNorm3d):
+            nn.init.constant_(m.weight, 1)
+            nn.init.constant_(m.bias, 0)
+
+    @staticmethod
+    def initialize_weights_he(m):
+        if isinstance(m, (nn.Conv3d, nn.ConvTranspose3d)):
+            nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.BatchNorm3d):
+            nn.init.constant_(m.weight, 1)
+            nn.init.constant_(m.bias, 0)
+
+
 class LirGenerator(nn.Module, ModelConfig):
     def __init__(self):
         super().__init__()
@@ -220,24 +244,29 @@ class LirDiscriminator(nn.Module, ModelConfig):
         return self.main(generated_lir).view(-1, 1).squeeze(1)
 
 
-class LirGanTrainer(ModelConfig):
+class LirGanTrainer(ModelConfig, WeightsInitializer):
     def __init__(
         self,
         lir_generator: LirGenerator,
-        lir_generator_loss_function: LirGeometricLoss,
         lir_discriminator: LirDiscriminator,
-        lir_discriminator_loss_function: _Loss,
         lir_dataloader: DataLoader,
+        lir_geometric_loss_function: LirGeometricLoss = None,
+        lir_discriminator_loss_function: _Loss = nn.BCEWithLogitsLoss(),
+        initial_weights_key: str = None,
     ):
         self.lir_generator = lir_generator
-        self.lir_generator_loss_function = lir_generator_loss_function
         self.lir_discriminator = lir_discriminator
-        self.lir_discriminator_loss_function = lir_discriminator_loss_function
         self.lir_dataloader = lir_dataloader
+        self.lir_geometric_loss_function = lir_geometric_loss_function
+        self.lir_discriminator_loss_function = lir_discriminator_loss_function
+        self.initial_weights_key = initial_weights_key
 
         self.lir_generator_optimizer, self.lir_discriminator_optimizer = self._get_optimizers(
             self.lir_generator, self.lir_discriminator, self.LEARNING_RATE, self.BETAS
         )
+
+        if self.initial_weights_key is not None:
+            self._set_initial_weights(self.lir_generator, self.lir_discriminator, self.initial_weights_key)
 
     def _get_optimizers(
         self,
@@ -260,6 +289,24 @@ class LirGanTrainer(ModelConfig):
         lir_discriminator_optimizer = torch.optim.Adam(lir_discriminator.parameters(), lr=learning_rate, betas=betas)
 
         return lir_generator_optimizer, lir_discriminator_optimizer
+
+    def _set_initial_weights(
+        self, lir_generator: LirGenerator, lir_discriminator: LirDiscriminator, initial_weights_key: str
+    ) -> None:
+        """_summary_
+
+        Args:
+            lir_generator (LirGenerator): _description_
+            lir_discriminator (LirDiscriminator): _description_
+            initial_weights_key (str): _description_
+        """
+
+        if initial_weights_key == self.XAVIER:
+            lir_generator.apply(self.initialize_weights_xavier)
+            lir_discriminator.apply(self.initialize_weights_xavier)
+        elif initial_weights_key == self.HE:
+            lir_generator.apply(self.initialize_weights_he)
+            lir_discriminator.apply(self.initialize_weights_he)
 
     def _train_lir_discriminator(self, input_polygons: torch.Tensor, target_lirs: torch.Tensor):
         """_summary_
@@ -294,7 +341,9 @@ class LirGanTrainer(ModelConfig):
         fake_d = self.lir_discriminator(generated_lir)
 
         adversarial_loss = self.lir_discriminator_loss_function(fake_d, torch.ones_like(fake_d))
-        geometric_loss = self.lir_generator_loss_function(input_polygons, generated_lir, target_lirs)
+        geometric_loss = 0
+        if self.lir_geometric_loss_function is not None:
+            geometric_loss = self.lir_geometric_loss_function(input_polygons, generated_lir, target_lirs)
 
         loss_g = adversarial_loss + geometric_loss
 
@@ -304,8 +353,40 @@ class LirGanTrainer(ModelConfig):
 
         return loss_g
 
-    def evaluate(self):
-        pass
+    def evaluate(self, batch_size_to_evaulate: int):
+        self.lir_generator.eval()
+        self.lir_discriminator.eval()
+
+        with torch.no_grad():
+            binary_grids = []
+
+            data_creator = DataCreator(creation_count=None)
+            for _ in range(batch_size_to_evaulate):
+                random_coordinates = data_creator._get_random_coordinates(
+                    vertices_count_min=data_creator.random_vertices_count_min,
+                    vertices_count_max=data_creator.random_vertices_count_max,
+                )
+
+                binary_grid_shaped_polygon = utils.get_binary_grid_shaped_polygon(
+                    random_coordinates.astype(np.int32), data_creator.canvas_size
+                )
+
+                random_input_polygon = (
+                    torch.tensor(binary_grid_shaped_polygon, dtype=torch.float)
+                    .unsqueeze(dim=0)
+                    .unsqueeze(dim=0)
+                    .to(self.DEVICE)
+                )
+
+                generated_lir = self.lir_generator(random_input_polygon) > 0.5
+
+                _ = binary_grid_shaped_polygon + generated_lir.squeeze().detach().cpu().numpy().astype(int)
+                binary_grids.append(binary_grid_shaped_polygon)
+
+            utils.visualize_binary_grids(binary_grids)
+
+        self.lir_generator.train()
+        self.lir_discriminator.train()
 
     def train(self):
         """Main function to train models"""
@@ -330,3 +411,30 @@ class LirGanTrainer(ModelConfig):
             avg_loss_d = np.mean(losses_d_per_epoch)
             losses_g.append(avg_loss_g)
             losses_d.append(avg_loss_d)
+
+            if epoch % self.LOG_INTERVAL == 0:
+                if len(self.lir_dataloader) == 1:
+                    # FIXME: Functionalizing the following codes
+                    self.lir_generator.eval()
+                    self.lir_discriminator.eval()
+                    with torch.no_grad():
+                        print(f"epoch: {epoch}/{self.EPOCHS}")
+                        input_polygon = input_polygons.squeeze().detach().cpu().numpy()
+                        target_lir = target_lirs.squeeze().detach().cpu().numpy()
+                        ground_truth = input_polygon + target_lir
+
+                        generated_lir = (
+                            (self.lir_generator(input_polygons) > 0.5).squeeze().detach().cpu().numpy().astype(int)
+                        )
+
+                        generated = input_polygon + generated_lir
+
+                        utils.visualize_binary_grids([ground_truth, generated])
+
+                    self.lir_generator.train()
+                    self.lir_discriminator.train()
+
+                    utils.plot_losses(losses_g=losses_g, losses_d=losses_d)
+
+                else:
+                    self.evaluate(self.BATCH_SIZE_TO_EVALUATE)
