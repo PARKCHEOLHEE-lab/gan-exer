@@ -308,10 +308,10 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             _type_: _description_
         """
 
-        generated_lir = self.lir_generator(input_polygons)
+        generated_lirs = self.lir_generator(input_polygons)
 
         real_d = self.lir_discriminator(target_lirs)
-        fake_d = self.lir_discriminator(generated_lir)
+        fake_d = self.lir_discriminator(generated_lirs)
 
         loss_real_d = self.lir_discriminator_loss_function(real_d, torch.ones_like(real_d))
         loss_fake_d = self.lir_discriminator_loss_function(fake_d, torch.zeros_like(fake_d))
