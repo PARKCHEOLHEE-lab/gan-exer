@@ -100,7 +100,7 @@ class LirGeometricLoss(nn.Module):
 
     @staticmethod
     def compute_feasibility_loss(
-        target_lir: torch.Tensor, generated_lir: torch.Tensor, feasibility_weight: float
+        input_polygon: torch.Tensor, generated_lir: torch.Tensor, feasibility_weight: float
     ) -> torch.Tensor:
         """compute the feasibility loss that checks the generated rectangle is within the input polygon
 
@@ -115,8 +115,8 @@ class LirGeometricLoss(nn.Module):
 
         generated_lir = (generated_lir > 0.5).float()
 
-        infeasibility_mask = (generated_lir == 1) & (target_lir != 1)
-        feasibility_loss = infeasibility_mask.sum().float() / target_lir.sum().float()
+        infeasibility_mask = (generated_lir == 1) & (input_polygon != 1)
+        feasibility_loss = infeasibility_mask.sum().float() / input_polygon.sum().float()
 
         return feasibility_loss * feasibility_weight
 
