@@ -127,7 +127,7 @@ class LirGeometricLoss(nn.Module):
             target_lirs (torch.Tensor): target rectangles
 
         Returns:
-            torch.Tensor: loss merged with bce, diou, area, feasibility
+            torch.Tensor: loss merged with bce, diou, feasibility
         """
 
         total_loss = 0
