@@ -56,14 +56,12 @@ class LirGeometricLoss(nn.Module):
         self,
         bce_weight: float = 1.0,
         diou_weight: float = 1.0,
-        area_weight: float = 1.0,
         feasibility_weight: float = 1.0,
     ):
         super().__init__()
 
         self.bce_weight = bce_weight
         self.diou_weight = diou_weight
-        self.area_weight = area_weight
         self.feasibility_weight = feasibility_weight
 
         self.bce_loss_function = nn.BCEWithLogitsLoss()
@@ -97,20 +95,6 @@ class LirGeometricLoss(nn.Module):
         diou_loss = 1 - (iou_score - normalized_distance)
 
         return diou_loss * diou_weight
-
-    @staticmethod
-    def compute_area_loss(generated_lir: torch.Tensor, area_weight: float) -> torch.Tensor:
-        """compute the area loss to maximize the size of a generated rectangle
-
-        Args:
-            generated_lir (torch.Tensor):  generated rectangle
-            area_weight (float): weight to multiply in the area loss
-
-        Returns:
-            torch.Tensor: area loss
-        """
-
-        return -generated_lir.sum() * area_weight
 
     @staticmethod
     def compute_feasibility_loss(
@@ -151,12 +135,11 @@ class LirGeometricLoss(nn.Module):
             bce_loss = self.bce_loss_function(generated_lir, target_lir)
 
             diou_loss = LirGeometricLoss.compute_diou_loss(generated_lir, target_lir, self.diou_weight)
-            area_loss = LirGeometricLoss.compute_area_loss(generated_lir, self.area_weight)
             feasibility_loss = LirGeometricLoss.compute_feasibility_loss(
                 input_polygon, generated_lir, self.feasibility_weight
             )
 
-            loss = bce_loss + diou_loss + area_loss + feasibility_loss
+            loss = bce_loss + diou_loss + feasibility_loss
 
             total_loss += loss
 
