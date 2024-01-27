@@ -244,6 +244,8 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self.lir_discriminator_loss_function = lir_discriminator_loss_function
         self.initial_weights_key = initial_weights_key
 
+        self.set_seed()
+
         self.lir_generator_optimizer, self.lir_discriminator_optimizer = self._get_optimizers(
             self.lir_generator, self.lir_discriminator, self.LEARNING_RATE, self.BETAS
         )
@@ -324,6 +326,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         fake_d = self.lir_discriminator(generated_lir)
 
         adversarial_loss = self.lir_discriminator_loss_function(fake_d, torch.ones_like(fake_d))
+
         geometric_loss = 0
         if self.lir_geometric_loss_function is not None:
             geometric_loss = self.lir_geometric_loss_function(input_polygons, generated_lir, target_lirs)
@@ -401,7 +404,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                     self.lir_generator.eval()
                     self.lir_discriminator.eval()
                     with torch.no_grad():
-                        print(f"epoch: {epoch}/{self.EPOCHS}")
+                        # print(f"epoch: {epoch}/{self.EPOCHS}")
                         input_polygon = input_polygons.squeeze().detach().cpu().numpy()
                         target_lir = target_lirs.squeeze().detach().cpu().numpy()
                         ground_truth = input_polygon + target_lir
