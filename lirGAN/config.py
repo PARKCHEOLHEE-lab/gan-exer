@@ -31,8 +31,8 @@ class ModelConfig:
         print(f"  Seeds set for numpy        : {seed}")
         print(f"  Seeds set for random       : {seed}")
 
-    EPOCHS = 1000
-    LOG_INTERVAL = int(EPOCHS / 10)
+    EPOCHS = 2000
+    LOG_INTERVAL = 1
     LEARNING_RATE = 0.0001
     BETAS = (0.5, 0.999)
     BATCH_SIZE = 100
