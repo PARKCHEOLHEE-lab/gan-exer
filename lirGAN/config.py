@@ -38,5 +38,7 @@ class ModelConfig:
     BATCH_SIZE = 100
     BATCH_SIZE_TO_EVALUATE = 5
 
+    LAMBDA = 10
+
     XAVIER = "xavier"
     HE = "he"

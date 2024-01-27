@@ -240,6 +240,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         lir_geometric_loss_function: LirGeometricLoss = None,
         lir_discriminator_loss_function: _Loss = nn.BCEWithLogitsLoss(),
         initial_weights_key: str = None,
+        use_gradient_penalty: bool = False,
     ):
         self.lir_generator = lir_generator
         self.lir_discriminator = lir_discriminator
@@ -247,6 +248,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self.lir_geometric_loss_function = lir_geometric_loss_function
         self.lir_discriminator_loss_function = lir_discriminator_loss_function
         self.initial_weights_key = initial_weights_key
+        self.use_gradient_penalty = use_gradient_penalty
 
         self.set_seed()
 
@@ -297,6 +299,39 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             lir_generator.apply(self.initialize_weights_he)
             lir_discriminator.apply(self.initialize_weights_he)
 
+    def _compute_gradient_penalty(self, target_lirs: torch.Tensor, generated_lirs: torch.Tensor) -> torch.Tensor:
+        """_summary_
+
+        Args:
+            target_lirs (torch.Tensor): _description_
+            generated_lirs (torch.Tensor): _description_
+
+        Returns:
+            torch.Tensor: _description_
+        """
+
+        batch_size, *_ = target_lirs.size()
+        alpha = torch.rand((batch_size, 1, 1, 1)).to(self.DEVICE)
+
+        interpolated = (alpha * target_lirs + ((1 - alpha) * generated_lirs)).requires_grad_(True).to(self.DEVICE)
+
+        d_interpolated = self.lir_discriminator(interpolated)
+
+        gradients = torch.autograd.grad(
+            outputs=d_interpolated,
+            inputs=interpolated,
+            grad_outputs=torch.ones_like(d_interpolated).to(self.DEVICE),
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True,
+        )[0]
+
+        gradients = gradients.view(batch_size, -1)
+        gradients_norm = torch.sqrt(torch.sum(gradients**2, dim=1) + 1e-12)
+        gradient_penalty = self.LAMBDA * ((gradients_norm - 1) ** 2).mean()
+
+        return gradient_penalty
+
     def _train_lir_discriminator(self, input_polygons: torch.Tensor, target_lirs: torch.Tensor):
         """_summary_
 
@@ -317,6 +352,8 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         loss_fake_d = self.lir_discriminator_loss_function(fake_d, torch.zeros_like(fake_d))
 
         loss_d = loss_real_d + loss_fake_d
+        if self.use_gradient_penalty:
+            loss_d += self._compute_gradient_penalty(target_lirs, generated_lirs)
 
         self.lir_discriminator_optimizer.zero_grad()
         loss_d.backward()
