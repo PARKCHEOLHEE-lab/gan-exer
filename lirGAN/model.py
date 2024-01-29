@@ -177,7 +177,7 @@ class LirGenerator(nn.Module, ModelConfig):
         super().__init__()
 
         self.main = nn.Sequential(
-            nn.Conv2d(1, 64, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.Conv2d(2, 64, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(64),
             nn.ReLU(True),
             nn.Conv2d(64, 32, kernel_size=4, stride=2, padding=1, bias=False),
@@ -198,8 +198,9 @@ class LirGenerator(nn.Module, ModelConfig):
 
         self.main.to(self.DEVICE)
 
-    def forward(self, input_polygon):
-        return self.main(input_polygon)
+    def forward(self, noise, input_polygon):
+        x = torch.cat([noise, input_polygon], dim=1)
+        return self.main(x)
 
 
 class LirDiscriminator(nn.Module, ModelConfig):
@@ -207,7 +208,7 @@ class LirDiscriminator(nn.Module, ModelConfig):
         super().__init__()
 
         self.main = nn.Sequential(
-            nn.Conv2d(1, 64, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.Conv2d(2, 64, kernel_size=4, stride=2, padding=1, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(128),
@@ -227,8 +228,9 @@ class LirDiscriminator(nn.Module, ModelConfig):
 
         self.main.to(self.DEVICE)
 
-    def forward(self, generated_lir):
-        return self.main(generated_lir).view(-1, 1).squeeze(1)
+    def forward(self, rectangle, input_polygon):
+        x = torch.cat([rectangle, input_polygon], dim=1)
+        return self.main(x).view(-1, 1).squeeze(1)
 
 
 class LirGanTrainer(ModelConfig, WeightsInitializer):
@@ -299,7 +301,9 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             lir_generator.apply(self.initialize_weights_he)
             lir_discriminator.apply(self.initialize_weights_he)
 
-    def _compute_gradient_penalty(self, target_lirs: torch.Tensor, generated_lirs: torch.Tensor) -> torch.Tensor:
+    def _compute_gradient_penalty(
+        self, target_lirs: torch.Tensor, generated_lirs: torch.Tensor, input_polygons: torch.Tensor
+    ) -> torch.Tensor:
         """_summary_
 
         Args:
@@ -315,7 +319,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
         interpolated = (alpha * target_lirs + ((1 - alpha) * generated_lirs)).requires_grad_(True).to(self.DEVICE)
 
-        d_interpolated = self.lir_discriminator(interpolated)
+        d_interpolated = self.lir_discriminator(interpolated, input_polygons)
 
         gradients = torch.autograd.grad(
             outputs=d_interpolated,
@@ -332,6 +336,18 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
         return gradient_penalty
 
+    def _get_noise(self, size: Tuple[int]) -> torch.Tensor:
+        """_summary_
+
+        Args:
+            size (Tuple[int]): _description_
+
+        Returns:
+            torch.Tensor: _description_
+        """
+
+        return torch.randn(size).to(self.DEVICE)
+
     def _train_lir_discriminator(self, input_polygons: torch.Tensor, target_lirs: torch.Tensor):
         """_summary_
 
@@ -343,17 +359,18 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             _type_: _description_
         """
 
-        generated_lirs = self.lir_generator(input_polygons)
+        noise = self._get_noise(input_polygons.shape)
+        generated_lirs = self.lir_generator(noise, input_polygons)
 
-        real_d = self.lir_discriminator(target_lirs)
-        fake_d = self.lir_discriminator(generated_lirs)
+        real_d = self.lir_discriminator(target_lirs, input_polygons)
+        fake_d = self.lir_discriminator(generated_lirs, input_polygons)
 
         loss_real_d = self.lir_discriminator_loss_function(real_d, torch.ones_like(real_d))
         loss_fake_d = self.lir_discriminator_loss_function(fake_d, torch.zeros_like(fake_d))
 
         loss_d = loss_real_d + loss_fake_d
         if self.use_gradient_penalty:
-            loss_d += self._compute_gradient_penalty(target_lirs, generated_lirs)
+            loss_d += self._compute_gradient_penalty(target_lirs, generated_lirs, input_polygons)
 
         self.lir_discriminator_optimizer.zero_grad()
         loss_d.backward()
@@ -362,9 +379,10 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         return loss_d
 
     def _train_lir_generator(self, input_polygons: torch.Tensor, target_lirs: torch.Tensor):
-        generated_lir = self.lir_generator(input_polygons)
+        noise = self._get_noise(input_polygons.shape)
+        generated_lir = self.lir_generator(noise, input_polygons)
 
-        fake_d = self.lir_discriminator(generated_lir)
+        fake_d = self.lir_discriminator(generated_lir, input_polygons)
 
         adversarial_loss = self.lir_discriminator_loss_function(fake_d, torch.ones_like(fake_d))
 
@@ -446,12 +464,18 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                     self.lir_discriminator.eval()
                     with torch.no_grad():
                         # print(f"epoch: {epoch}/{self.EPOCHS}")
+                        noise = self._get_noise(input_polygons.shape)
                         input_polygon = input_polygons.squeeze().detach().cpu().numpy()
                         target_lir = target_lirs.squeeze().detach().cpu().numpy()
                         ground_truth = input_polygon + target_lir
 
                         generated_lir = (
-                            (self.lir_generator(input_polygons) > 0.5).squeeze().detach().cpu().numpy().astype(int)
+                            (self.lir_generator(noise, input_polygons) > 0.5)
+                            .squeeze()
+                            .detach()
+                            .cpu()
+                            .numpy()
+                            .astype(int)
                         )
 
                         generated = input_polygon + generated_lir
