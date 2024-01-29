@@ -115,10 +115,16 @@ class LirGeometricLoss(nn.Module):
 
         generated_lir = (generated_lir > 0.5).float()
 
-        infeasibility_mask = (generated_lir == 1) & (input_polygon != 1)
-        feasibility_loss = infeasibility_mask.sum().float() / input_polygon.sum().float()
+        overextension_mask = (generated_lir == 1) & (input_polygon != 1)
 
-        return feasibility_loss * feasibility_weight
+        underfitting_mask = (generated_lir != 1) & (input_polygon == 1)
+
+        overextension_loss = overextension_mask.sum().float() / input_polygon.sum().float()
+        underfitting_loss = underfitting_mask.sum().float() / input_polygon.sum().float()
+
+        feasibility_loss = (overextension_loss + underfitting_loss) * feasibility_weight
+
+        return feasibility_loss
 
     def forward(
         self, input_polygons: torch.Tensor, generated_lirs: torch.Tensor, target_lirs: torch.Tensor
