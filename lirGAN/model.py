@@ -141,12 +141,12 @@ class LirGeometricLoss(nn.Module):
         """
 
         total_loss = 0
-        for generated_lir, target_lir, input_polygon in zip(generated_lirs, target_lirs, input_polygons):
+        for generated_lir, target_lir, _ in zip(generated_lirs, target_lirs, input_polygons):
             bce_loss = self.bce_loss_function(generated_lir, target_lir) * self.bce_weight
 
             diou_loss = LirGeometricLoss.compute_diou_loss(generated_lir, target_lir, self.diou_weight)
             feasibility_loss = LirGeometricLoss.compute_feasibility_loss(
-                input_polygon, generated_lir, self.feasibility_weight
+                target_lir, generated_lir, self.feasibility_weight
             )
 
             loss = bce_loss + diou_loss + feasibility_loss
