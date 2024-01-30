@@ -354,6 +354,19 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
         return torch.randn(size).to(self.DEVICE)
 
+    def _get_smoothed_labels(self, labels: torch.Tensor, smoothing: float = 0.1) -> torch.Tensor:
+        """_summary_
+
+        Args:
+            labels (torch.Tensor): _description_
+            smoothing (float, optional): _description_. Defaults to 0.1.
+
+        Returns:
+            torch.Tensor: _description_
+        """
+
+        return labels * (1 - smoothing) + 0.5 * smoothing
+
     def _train_lir_discriminator(self, input_polygons: torch.Tensor, target_lirs: torch.Tensor):
         """_summary_
 
@@ -371,8 +384,8 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         real_d = self.lir_discriminator(target_lirs, input_polygons)
         fake_d = self.lir_discriminator(generated_lirs, input_polygons)
 
-        loss_real_d = self.lir_discriminator_loss_function(real_d, torch.ones_like(real_d))
-        loss_fake_d = self.lir_discriminator_loss_function(fake_d, torch.zeros_like(fake_d))
+        loss_real_d = self.lir_discriminator_loss_function(real_d, self._get_smoothed_labels(torch.ones_like(real_d)))
+        loss_fake_d = self.lir_discriminator_loss_function(fake_d, self._get_smoothed_labels(torch.zeros_like(fake_d)))
 
         loss_d = loss_real_d + loss_fake_d
         if self.use_gradient_penalty:
@@ -390,7 +403,9 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
         fake_d = self.lir_discriminator(generated_lir, input_polygons)
 
-        adversarial_loss = self.lir_discriminator_loss_function(fake_d, torch.ones_like(fake_d))
+        adversarial_loss = self.lir_discriminator_loss_function(
+            fake_d, self._get_smoothed_labels(torch.ones_like(fake_d))
+        )
 
         geometric_loss = 0
         if self.lir_geometric_loss_function is not None:
