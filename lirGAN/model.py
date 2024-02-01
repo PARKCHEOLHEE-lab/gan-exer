@@ -179,34 +179,57 @@ class WeightsInitializer:
 
 
 class LirGenerator(nn.Module, ModelConfig):
-    def __init__(self):
+    def __init__(self, use_tanh: bool):
         super().__init__()
 
-        self.main = nn.Sequential(
-            nn.Conv2d(2, 64, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(64),
+        self.use_tanh = use_tanh
+
+        self.linear = nn.Sequential(
+            nn.Linear(256 * 256, 1024),
             nn.ReLU(True),
-            nn.Conv2d(64, 32, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(32),
+            nn.Linear(1024, 512),
             nn.ReLU(True),
-            nn.Conv2d(32, 16, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(16),
+            nn.Linear(512, 256),
             nn.ReLU(True),
-            nn.ConvTranspose2d(16, 32, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(32),
+            nn.Linear(256, 128),
             nn.ReLU(True),
-            nn.ConvTranspose2d(32, 64, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(64, 1, kernel_size=8, stride=2, padding=1, bias=False),
-            nn.Sigmoid(),
         )
 
-        self.main.to(self.DEVICE)
+        self.main = nn.Sequential(
+            nn.ConvTranspose2d(256, 1024, kernel_size=4, stride=2, padding=0),
+            nn.BatchNorm2d(1024),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(1024, 512, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(512, 512, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, 1, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(1),
+        )
+
+        self.to(self.DEVICE)
 
     def forward(self, noise, input_polygon):
-        x = torch.cat([noise, input_polygon], dim=1)
-        return self.main(x)
+        fc = self.linear(input_polygon.reshape(input_polygon.shape[0], -1))
+        x = torch.cat([noise, fc], dim=1)
+        x = x.reshape(x.shape[0], 256, 1, 1)
+        x = self.main(x)
+
+        if self.use_tanh:
+            return nn.Tanh()(x)
+
+        return nn.Sigmoid()(x)
 
 
 class LirDiscriminator(nn.Module, ModelConfig):
@@ -222,12 +245,15 @@ class LirDiscriminator(nn.Module, ModelConfig):
             nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(256),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(256, 1, kernel_size=4, stride=1, padding=0, bias=False),
+            nn.Conv2d(256, 512, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(512),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(512, 1, kernel_size=4, stride=2, padding=0, bias=False),
             nn.AdaptiveAvgPool2d(1),
             nn.Sigmoid(),
         )
 
-        self.main.to(self.DEVICE)
+        self.to(self.DEVICE)
 
     def forward(self, rectangle, input_polygon):
         x = torch.cat([rectangle, input_polygon], dim=1)
@@ -373,7 +399,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             _type_: _description_
         """
 
-        noise = self._get_noise(input_polygons.shape)
+        noise = self._get_noise((input_polygons.shape[0], self.NOISE_DIM))
         generated_lirs = self.lir_generator(noise, input_polygons)
 
         real_d = self.lir_discriminator(target_lirs, input_polygons)
@@ -393,7 +419,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         return loss_d
 
     def _train_lir_generator(self, input_polygons: torch.Tensor, target_lirs: torch.Tensor):
-        noise = self._get_noise(input_polygons.shape)
+        noise = self._get_noise((input_polygons.shape[0], self.NOISE_DIM))
         generated_lir = self.lir_generator(noise, input_polygons)
 
         fake_d = self.lir_discriminator(generated_lir, input_polygons)
@@ -480,7 +506,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                     self.lir_discriminator.eval()
                     with torch.no_grad():
                         # print(f"epoch: {epoch}/{self.EPOCHS}")
-                        noise = self._get_noise(input_polygons.shape)
+                        noise = self._get_noise((input_polygons.shape[0], self.NOISE_DIM))
                         input_polygon = input_polygons.squeeze().detach().cpu().numpy()
                         target_lir = target_lirs.squeeze().detach().cpu().numpy()
                         ground_truth = input_polygon + target_lir
