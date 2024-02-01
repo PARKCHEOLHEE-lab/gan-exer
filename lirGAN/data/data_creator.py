@@ -10,7 +10,7 @@ np.random.seed(0)
 
 
 class DataCreatorConfiguration:
-    canvas_w_h = 200
+    canvas_w_h = 256
     canvas_size = np.array([canvas_w_h, canvas_w_h])
 
     random_vertices_count_min = 3
