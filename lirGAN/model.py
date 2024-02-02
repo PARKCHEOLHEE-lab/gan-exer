@@ -263,6 +263,7 @@ class LirDiscriminator(nn.Module, ModelConfig):
 class LirGanTrainer(ModelConfig, WeightsInitializer):
     def __init__(
         self,
+        epochs: int,
         lir_generator: LirGenerator,
         lir_discriminator: LirDiscriminator,
         lir_dataloader: DataLoader,
@@ -271,6 +272,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         initial_weights_key: str = None,
         use_gradient_penalty: bool = False,
     ):
+        self.epochs = epochs
         self.lir_generator = lir_generator
         self.lir_discriminator = lir_discriminator
         self.lir_dataloader = lir_dataloader
@@ -481,7 +483,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         losses_g = []
         losses_d = []
 
-        for epoch in range(1, self.EPOCHS + 1):
+        for epoch in range(1, self.epochs + 1):
             if epoch % self.LOG_INTERVAL == 0:
                 clear_output(wait=True)
 
