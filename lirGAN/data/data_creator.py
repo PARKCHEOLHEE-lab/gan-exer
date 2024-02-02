@@ -164,5 +164,5 @@ if __name__ == "__main__":
     from debugvisualizer.debugvisualizer import Plotter  # noqa: F401
     from shapely.geometry import Polygon, Point  # noqa: F401
 
-    data_creator = DataCreator(creation_count=300)
+    data_creator = DataCreator(creation_count=500)
     data_creator.create()
