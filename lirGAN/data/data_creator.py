@@ -6,8 +6,6 @@ import numpy as np
 from lirGAN.data.largest_inscribed_rectangle import LargestInscribedRectangle
 from lirGAN.data import utils
 
-np.random.seed(0)
-
 
 class DataCreatorConfiguration:
     canvas_w_h = 256
@@ -163,6 +161,8 @@ class DataCreator(DataCreatorHelper):
 if __name__ == "__main__":
     from debugvisualizer.debugvisualizer import Plotter  # noqa: F401
     from shapely.geometry import Polygon, Point  # noqa: F401
+
+    np.random.seed(0)
 
     data_creator = DataCreator(creation_count=1000)
     data_creator.create()
