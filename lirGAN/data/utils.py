@@ -75,7 +75,7 @@ def get_binary_grid_shaped_polygon(coordinates: np.ndarray, canvas_size: np.ndar
     return binary_grid_shaped_polygon
 
 
-def visualize_binary_grids(binary_grids: List[np.ndarray], colormap: Union[List[str], str] = None) -> None:
+def plot_binary_grids(binary_grids: List[np.ndarray], colormap: Union[List[str], str] = None) -> None:
     """visualize multiple binary grids in a row
 
     Args:

@@ -86,6 +86,9 @@ class LirGeometricLoss(nn.Module):
         iou_score = torch.sum(intersection) / torch.sum(union)
 
         generated_lir_centroid = torch.nonzero(generated_lir).float().mean(dim=0)
+        if any(torch.isnan(generated_lir_centroid)):
+            generated_lir_centroid[0], generated_lir_centroid[1] = 0, 0
+
         target_lir_centroid = torch.nonzero(target_lir).float().mean(dim=0)
 
         distance = torch.norm(generated_lir_centroid - target_lir_centroid)
@@ -141,15 +144,19 @@ class LirGeometricLoss(nn.Module):
         """
 
         total_loss = 0
-        for generated_lir, target_lir, _ in zip(generated_lirs, target_lirs, input_polygons):
+        for generated_lir, target_lir, input_polygon in zip(generated_lirs, target_lirs, input_polygons):
             bce_loss = self.bce_loss_function(generated_lir, target_lir) * self.bce_weight
 
             diou_loss = LirGeometricLoss.compute_diou_loss(generated_lir, target_lir, self.diou_weight)
-            feasibility_loss = LirGeometricLoss.compute_feasibility_loss(
+
+            feasibility_loss_1 = LirGeometricLoss.compute_feasibility_loss(
                 target_lir, generated_lir, self.feasibility_weight
             )
+            feasibility_loss_2 = LirGeometricLoss.compute_feasibility_loss(
+                input_polygon, generated_lir, self.feasibility_weight
+            )
 
-            loss = bce_loss + diou_loss + feasibility_loss
+            loss = bce_loss + diou_loss + feasibility_loss_1 + feasibility_loss_2
 
             total_loss += loss
 
@@ -270,6 +277,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         lir_geometric_loss_function: LirGeometricLoss = None,
         lir_discriminator_loss_function: _Loss = nn.BCEWithLogitsLoss(),
         initial_weights_key: str = None,
+        log_interval: int = None,
         use_gradient_penalty: bool = False,
     ):
         self.epochs = epochs
@@ -279,9 +287,8 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self.lir_geometric_loss_function = lir_geometric_loss_function
         self.lir_discriminator_loss_function = lir_discriminator_loss_function
         self.initial_weights_key = initial_weights_key
+        self.log_interval = self.LOG_INTERVAL if log_interval is None else log_interval
         self.use_gradient_penalty = use_gradient_penalty
-
-        self.set_seed()
 
         self.lir_generator_optimizer, self.lir_discriminator_optimizer = self._get_optimizers(
             self.lir_generator, self.lir_discriminator, self.LEARNING_RATE, self.BETAS
@@ -442,37 +449,77 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
         return loss_g
 
-    def evaluate(self, batch_size_to_evaulate: int):
+    def evaluate(
+        self,
+        batch_size_to_evaulate: int,
+        batch_size_to_evaulate_trained_data: int,
+        input_polygons: torch.Tensor,
+        target_lirs: torch.Tensor,
+        losses_g,
+        losses_d,
+    ):
         self.lir_generator.eval()
         self.lir_discriminator.eval()
 
         with torch.no_grad():
             binary_grids = []
+            if len(self.lir_dataloader) > 1:
+                data_creator = DataCreator(creation_count=None)
+                for _ in range(batch_size_to_evaulate):
+                    random_coordinates = data_creator._get_fitted_coordinates(
+                        coordinates=data_creator._get_random_coordinates(
+                            vertices_count_min=data_creator.random_vertices_count_min,
+                            vertices_count_max=data_creator.random_vertices_count_max,
+                        ),
+                        canvas_size=data_creator.canvas_size,
+                    )
 
-            data_creator = DataCreator(creation_count=None)
-            for _ in range(batch_size_to_evaulate):
-                random_coordinates = data_creator._get_random_coordinates(
-                    vertices_count_min=data_creator.random_vertices_count_min,
-                    vertices_count_max=data_creator.random_vertices_count_max,
+                    binary_grid_shaped_polygon = utils.get_binary_grid_shaped_polygon(
+                        random_coordinates.astype(np.int32), data_creator.canvas_size
+                    )
+
+                    random_input_polygon = (
+                        torch.tensor(binary_grid_shaped_polygon, dtype=torch.float)
+                        .unsqueeze(dim=0)
+                        .unsqueeze(dim=0)
+                        .to(self.DEVICE)
+                    )
+
+                    noise = self._get_noise((1, self.NOISE_DIM))
+                    generated_lir = self.lir_generator(noise, random_input_polygon) > 0.5
+                    generated_lir = generated_lir.squeeze().detach().cpu().numpy().astype(int)
+                    generated_lir = np.logical_and(generated_lir, binary_grid_shaped_polygon)
+
+                    merged = binary_grid_shaped_polygon + generated_lir
+                    binary_grids.append(merged)
+
+                for input_polygon in input_polygons[:batch_size_to_evaulate_trained_data]:
+                    noise = self._get_noise((1, self.NOISE_DIM))
+                    generated_lir = self.lir_generator(noise, input_polygon) > 0.5
+                    generated_lir = generated_lir.squeeze().detach().cpu().numpy().astype(int)
+
+                    input_polygon = input_polygon.squeeze().detach().cpu().numpy().astype(int)
+
+                    generated_lir = np.logical_and(generated_lir, input_polygon)
+
+                    merged = input_polygon + generated_lir
+                    binary_grids.append(merged)
+
+            else:
+                noise = self._get_noise((input_polygons.shape[0], self.NOISE_DIM))
+                input_polygon = input_polygons.squeeze().detach().cpu().numpy()
+                target_lir = target_lirs.squeeze().detach().cpu().numpy()
+
+                generated_lir = (
+                    (self.lir_generator(noise, input_polygons) > 0.5).squeeze().detach().cpu().numpy().astype(int)
                 )
 
-                binary_grid_shaped_polygon = utils.get_binary_grid_shaped_polygon(
-                    random_coordinates.astype(np.int32), data_creator.canvas_size
-                )
+                generated_lir = np.logical_and(generated_lir, input_polygon)
 
-                random_input_polygon = (
-                    torch.tensor(binary_grid_shaped_polygon, dtype=torch.float)
-                    .unsqueeze(dim=0)
-                    .unsqueeze(dim=0)
-                    .to(self.DEVICE)
-                )
+                binary_grids.extend([input_polygon + target_lir, input_polygon + generated_lir])
 
-                generated_lir = self.lir_generator(random_input_polygon) > 0.5
-
-                _ = binary_grid_shaped_polygon + generated_lir.squeeze().detach().cpu().numpy().astype(int)
-                binary_grids.append(binary_grid_shaped_polygon)
-
-            utils.visualize_binary_grids(binary_grids)
+            utils.plot_binary_grids(binary_grids)
+            utils.plot_losses(losses_g=losses_g, losses_d=losses_d)
 
         self.lir_generator.train()
         self.lir_discriminator.train()
@@ -484,7 +531,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         losses_d = []
 
         for epoch in range(1, self.epochs + 1):
-            if epoch % self.LOG_INTERVAL == 0:
+            if epoch % self.log_interval == 0:
                 clear_output(wait=True)
 
             losses_g_per_epoch = []
@@ -501,35 +548,12 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             losses_g.append(avg_loss_g)
             losses_d.append(avg_loss_d)
 
-            if epoch % self.LOG_INTERVAL == 0:
-                if len(self.lir_dataloader) == 1:
-                    # FIXME: Functionalizing the following codes
-                    self.lir_generator.eval()
-                    self.lir_discriminator.eval()
-                    with torch.no_grad():
-                        # print(f"epoch: {epoch}/{self.EPOCHS}")
-                        noise = self._get_noise((input_polygons.shape[0], self.NOISE_DIM))
-                        input_polygon = input_polygons.squeeze().detach().cpu().numpy()
-                        target_lir = target_lirs.squeeze().detach().cpu().numpy()
-                        ground_truth = input_polygon + target_lir
-
-                        generated_lir = (
-                            (self.lir_generator(noise, input_polygons) > 0.5)
-                            .squeeze()
-                            .detach()
-                            .cpu()
-                            .numpy()
-                            .astype(int)
-                        )
-
-                        generated = input_polygon + generated_lir
-
-                        utils.visualize_binary_grids([ground_truth, generated])
-
-                    self.lir_generator.train()
-                    self.lir_discriminator.train()
-
-                    utils.plot_losses(losses_g=losses_g, losses_d=losses_d)
-
-                else:
-                    self.evaluate(self.BATCH_SIZE_TO_EVALUATE)
+            if epoch % self.log_interval == 0:
+                self.evaluate(
+                    batch_size_to_evaulate=3,
+                    batch_size_to_evaulate_trained_data=3,
+                    input_polygons=input_polygons,
+                    target_lirs=target_lirs,
+                    losses_g=losses_g,
+                    losses_d=losses_d,
+                )
