@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
 from typing import Callable, List, Union
-from IPython.display import clear_output
 
 
 def runtime_calculator(func: Callable) -> Callable:
@@ -75,7 +74,9 @@ def get_binary_grid_shaped_polygon(coordinates: np.ndarray, canvas_size: np.ndar
     return binary_grid_shaped_polygon
 
 
-def plot_binary_grids(binary_grids: List[np.ndarray], colormap: Union[List[str], str] = None) -> None:
+def plot_binary_grids(
+    binary_grids: List[np.ndarray], colormap: Union[List[str], str] = None, save_path: str = None
+) -> None:
     """visualize multiple binary grids in a row
 
     Args:
@@ -84,7 +85,7 @@ def plot_binary_grids(binary_grids: List[np.ndarray], colormap: Union[List[str],
     """
 
     n = len(binary_grids)
-    _, axs = plt.subplots(1, n, figsize=(n * 5, 5))
+    fig, axs = plt.subplots(1, n, figsize=(n * 5, 5))
 
     # Handle colormap
     matplotlib_colormap = "Greys"
@@ -102,12 +103,21 @@ def plot_binary_grids(binary_grids: List[np.ndarray], colormap: Union[List[str],
         ax.imshow(grid, cmap=matplotlib_colormap)
         ax.axis("off")
 
+    if save_path is not None:
+        fig.savefig(save_path)
+
     plt.show()
 
 
-def plot_losses(losses_g, losses_d, figsize=(10, 5), plot_avg_line=False):
+def plot_losses(losses_g, losses_d, figsize=(10, 5), plot_avg_line=False, save_path=None):
     """Visualizes the generator and discriminator losses,
     draws a dashed line for average losses and annotates them."""
+
+    if save_path is not None and 1 in (len(losses_d), len(losses_g)):
+        plt.figure(figsize=figsize)
+        plt.savefig(save_path)
+        plt.close()
+        return
 
     if len(losses_g) <= 1:
         return
@@ -161,6 +171,8 @@ def plot_losses(losses_g, losses_d, figsize=(10, 5), plot_avg_line=False):
     plt.ylabel("Loss")
     plt.legend()
     plt.grid(True, which="both", linestyle="--", linewidth=0.5)
-    plt.show()
 
-    clear_output(wait=True)
+    if save_path is not None:
+        plt.savefig(save_path)
+
+    plt.show()

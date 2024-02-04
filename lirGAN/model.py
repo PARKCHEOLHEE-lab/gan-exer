@@ -278,6 +278,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         lir_discriminator_loss_function: _Loss = nn.BCEWithLogitsLoss(),
         initial_weights_key: str = None,
         log_interval: int = None,
+        record_name: str = None,
         use_gradient_penalty: bool = False,
     ):
         self.epochs = epochs
@@ -289,6 +290,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self.initial_weights_key = initial_weights_key
         self.log_interval = self.LOG_INTERVAL if log_interval is None else log_interval
         self.use_gradient_penalty = use_gradient_penalty
+        self.record_name = record_name
 
         self.lir_generator_optimizer, self.lir_discriminator_optimizer = self._get_optimizers(
             self.lir_generator, self.lir_discriminator, self.LEARNING_RATE, self.BETAS
@@ -296,6 +298,17 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
         if self.initial_weights_key is not None:
             self._set_initial_weights(self.lir_generator, self.lir_discriminator, self.initial_weights_key)
+
+        self.records_path = None
+        self.records_path_with_name = None
+        if record_name is not None:
+            self.records_path = os.path.abspath(os.path.join(__file__, "../", "records"))
+            if not os.path.isdir(self.records_path):
+                os.mkdir(self.records_path)
+
+            self.records_path_with_name = os.path.join(self.records_path, record_name)
+            if not os.path.isdir(self.records_path_with_name):
+                os.mkdir(self.records_path_with_name)
 
     def _get_optimizers(
         self,
@@ -457,6 +470,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         target_lirs: torch.Tensor,
         losses_g,
         losses_d,
+        epoch,
     ):
         self.lir_generator.eval()
         self.lir_discriminator.eval()
@@ -518,8 +532,14 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
                 binary_grids.extend([input_polygon + target_lir, input_polygon + generated_lir])
 
-            utils.plot_binary_grids(binary_grids)
-            utils.plot_losses(losses_g=losses_g, losses_d=losses_d)
+            utils.plot_binary_grids(
+                binary_grids, save_path=os.path.join(self.records_path_with_name, f"geometry-{epoch}.png")
+            )
+            utils.plot_losses(
+                losses_g=losses_g,
+                losses_d=losses_d,
+                save_path=os.path.join(self.records_path_with_name, f"losses-{epoch}.png"),
+            )
 
         self.lir_generator.train()
         self.lir_discriminator.train()
@@ -556,4 +576,5 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                     target_lirs=target_lirs,
                     losses_g=losses_g,
                     losses_d=losses_d,
+                    epoch=epoch,
                 )
