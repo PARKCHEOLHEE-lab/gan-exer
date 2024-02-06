@@ -290,7 +290,6 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self.initial_weights_key = initial_weights_key
         self.log_interval = self.LOG_INTERVAL if log_interval is None else log_interval
         self.use_gradient_penalty = use_gradient_penalty
-        self.record_name = record_name
 
         self.lir_generator_optimizer, self.lir_discriminator_optimizer = self._get_optimizers(
             self.lir_generator, self.lir_discriminator, self.LEARNING_RATE, self.BETAS
@@ -298,6 +297,15 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
         if self.initial_weights_key is not None:
             self._set_initial_weights(self.lir_generator, self.lir_discriminator, self.initial_weights_key)
+
+        self._make_dirs(record_name)
+
+    def _make_dirs(self, record_name) -> None:
+        """_summary_
+
+        Args:
+            record_name (_type_): _description_
+        """
 
         self.records_path = None
         self.records_path_with_name = None
@@ -309,6 +317,14 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             self.records_path_with_name = os.path.join(self.records_path, record_name)
             if not os.path.isdir(self.records_path_with_name):
                 os.mkdir(self.records_path_with_name)
+
+            self.pths_path = os.path.abspath(os.path.join(__file__, "../", "pths"))
+            if not os.path.isdir(self.pths_path):
+                os.mkdir(self.pths_path)
+
+            self.pths_path_with_name = os.path.join(self.pths_path, record_name)
+            if not os.path.isdir(self.pths_path_with_name):
+                os.mkdir(self.pths_path_with_name)
 
     def _get_optimizers(
         self,
@@ -578,3 +594,6 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                     losses_d=losses_d,
                     epoch=epoch,
                 )
+
+                torch.save(self.lir_generator.state_dict(), "")
+                torch.save(self.lir_discriminator.state_dict(), "")
