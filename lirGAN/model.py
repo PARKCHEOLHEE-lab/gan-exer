@@ -318,6 +318,18 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             if not os.path.isdir(self.records_path_with_name):
                 os.mkdir(self.records_path_with_name)
 
+            self.records_path_polygons = os.path.join(self.records_path_with_name, "polygons")
+            if not os.path.isdir(self.records_path_polygons):
+                os.mkdir(self.records_path_polygons)
+
+            self.records_path_grpahs = os.path.join(self.records_path_with_name, "graphs")
+            if not os.path.isdir(self.records_path_grpahs):
+                os.mkdir(self.records_path_grpahs)
+
+            self.records_path_losses = os.path.join(self.records_path_with_name, "losses")
+            if not os.path.isdir(self.records_path_losses):
+                os.mkdir(self.records_path_losses)
+
             self.pths_path = os.path.abspath(os.path.join(__file__, "../", "pths"))
             if not os.path.isdir(self.pths_path):
                 os.mkdir(self.pths_path)
@@ -549,12 +561,12 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                 binary_grids.extend([input_polygon + target_lir, input_polygon + generated_lir])
 
             utils.plot_binary_grids(
-                binary_grids, save_path=os.path.join(self.records_path_with_name, f"geometry-{epoch}.png")
+                binary_grids, save_path=os.path.join(self.records_path_polygons, f"polygons-{epoch}.png")
             )
             utils.plot_losses(
                 losses_g=losses_g,
                 losses_d=losses_d,
-                save_path=os.path.join(self.records_path_with_name, f"losses-{epoch}.png"),
+                save_path=os.path.join(self.records_path_grpahs, f"graphs-{epoch}.png"),
             )
 
         self.lir_generator.train()
@@ -565,6 +577,12 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
         losses_g = []
         losses_d = []
+
+        losses_npy_path = os.path.join(self.records_path_losses, "losses.npy")
+        if os.path.isfile(losses_npy_path):
+            losses = np.load(losses_npy_path)
+            losses_g = list(losses[0])
+            losses_d = list(losses[1])
 
         for epoch in range(1, self.epochs + 1):
             if epoch % self.log_interval == 0:
@@ -595,5 +613,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                     epoch=epoch,
                 )
 
-                torch.save(self.lir_generator.state_dict(), "")
-                torch.save(self.lir_discriminator.state_dict(), "")
+                np.save(losses_npy_path, np.array([losses_g, losses_d]))
+
+                # torch.save(self.lir_generator.state_dict(), "")
+                # torch.save(self.lir_discriminator.state_dict(), "")
