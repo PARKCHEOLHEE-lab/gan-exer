@@ -289,32 +289,29 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self.lir_discriminator_loss_function = lir_discriminator_loss_function
         self.initial_weights_key = initial_weights_key
         self.log_interval = self.LOG_INTERVAL if log_interval is None else log_interval
+        self.record_name = record_name
         self.use_gradient_penalty = use_gradient_penalty
+        self.is_pths_set = False
+
+        self._make_dirs_and_assign_paths()
+        self._set_latest_pths()
+
+        if not self.is_pths_set and self.initial_weights_key is not None:
+            self._set_initial_weights(self.lir_generator, self.lir_discriminator, self.initial_weights_key)
 
         self.lir_generator_optimizer, self.lir_discriminator_optimizer = self._get_optimizers(
             self.lir_generator, self.lir_discriminator, self.LEARNING_RATE, self.BETAS
         )
 
-        if self.initial_weights_key is not None:
-            self._set_initial_weights(self.lir_generator, self.lir_discriminator, self.initial_weights_key)
+    def _make_dirs_and_assign_paths(self) -> None:
+        """_summary_"""
 
-        self._make_dirs(record_name)
-
-    def _make_dirs(self, record_name) -> None:
-        """_summary_
-
-        Args:
-            record_name (_type_): _description_
-        """
-
-        self.records_path = None
-        self.records_path_with_name = None
-        if record_name is not None:
+        if self.record_name is not None:
             self.records_path = os.path.abspath(os.path.join(__file__, "../", "records"))
             if not os.path.isdir(self.records_path):
                 os.mkdir(self.records_path)
 
-            self.records_path_with_name = os.path.join(self.records_path, record_name)
+            self.records_path_with_name = os.path.join(self.records_path, self.record_name)
             if not os.path.isdir(self.records_path_with_name):
                 os.mkdir(self.records_path_with_name)
 
@@ -334,9 +331,35 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             if not os.path.isdir(self.pths_path):
                 os.mkdir(self.pths_path)
 
-            self.pths_path_with_name = os.path.join(self.pths_path, record_name)
+            self.pths_path_with_name = os.path.join(self.pths_path, self.record_name)
             if not os.path.isdir(self.pths_path_with_name):
                 os.mkdir(self.pths_path_with_name)
+
+            self.lir_generator_pth_path = os.path.join(self.pths_path_with_name, "lir_generator.pth")
+            self.lir_discriminator_pth_path = os.path.join(self.pths_path_with_name, "lir_discriminator.pth")
+
+    def _set_latest_pths(self) -> None:
+        """_summary_"""
+
+        if (
+            self.record_name is not None
+            and os.path.isfile(self.lir_generator_pth_path)
+            and os.path.isfile(self.lir_discriminator_pth_path)
+        ):
+            self.lir_generator.load_state_dict(
+                torch.load(self.lir_generator_pth_path, map_location=torch.device(self.DEVICE))
+            )
+
+            self.lir_discriminator.load_state_dict(
+                torch.load(self.lir_discriminator_pth_path, map_location=torch.device(self.DEVICE))
+            )
+
+            print("Set initial weights from existing .pths:")
+            print(f"  generator_pth_path:     {self.lir_generator_pth_path}")
+            print(f"  discriminator_pth_path: {self.lir_discriminator_pth_path}")
+            print()
+
+            self.is_pths_set = True
 
     def _get_optimizers(
         self,
@@ -498,7 +521,8 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         target_lirs: torch.Tensor,
         losses_g,
         losses_d,
-        epoch,
+        polygons_save_path,
+        graphs_save_path,
     ):
         self.lir_generator.eval()
         self.lir_discriminator.eval()
@@ -560,14 +584,8 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
                 binary_grids.extend([input_polygon + target_lir, input_polygon + generated_lir])
 
-            utils.plot_binary_grids(
-                binary_grids, save_path=os.path.join(self.records_path_polygons, f"polygons-{epoch}.png")
-            )
-            utils.plot_losses(
-                losses_g=losses_g,
-                losses_d=losses_d,
-                save_path=os.path.join(self.records_path_grpahs, f"graphs-{epoch}.png"),
-            )
+            utils.plot_binary_grids(binary_grids, save_path=polygons_save_path)
+            utils.plot_losses(losses_g=losses_g, losses_d=losses_d, save_path=graphs_save_path)
 
         self.lir_generator.train()
         self.lir_discriminator.train()
@@ -578,13 +596,21 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         losses_g = []
         losses_d = []
 
-        losses_npy_path = os.path.join(self.records_path_losses, "losses.npy")
-        if os.path.isfile(losses_npy_path):
-            losses = np.load(losses_npy_path)
-            losses_g = list(losses[0])
-            losses_d = list(losses[1])
+        polygons_save_path = None
+        graphs_save_path = None
+
+        if self.record_name is not None:
+            losses_npy_path = os.path.join(self.records_path_losses, "losses.npy")
+            if os.path.isfile(losses_npy_path):
+                losses = np.load(losses_npy_path)
+                losses_g = list(losses[0])
+                losses_d = list(losses[1])
+
+        epoch_addition = len(losses_g)
 
         for epoch in range(1, self.epochs + 1):
+            epoch += epoch_addition
+
             if epoch % self.log_interval == 0:
                 clear_output(wait=True)
 
@@ -603,6 +629,10 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             losses_d.append(avg_loss_d)
 
             if epoch % self.log_interval == 0:
+                if self.record_name is not None:
+                    polygons_save_path = os.path.join(self.records_path_polygons, f"polygons-{epoch}.png")
+                    graphs_save_path = os.path.join(self.records_path_grpahs, f"graphs-{epoch}.png")
+
                 self.evaluate(
                     batch_size_to_evaulate=3,
                     batch_size_to_evaulate_trained_data=3,
@@ -610,10 +640,11 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                     target_lirs=target_lirs,
                     losses_g=losses_g,
                     losses_d=losses_d,
-                    epoch=epoch,
+                    polygons_save_path=polygons_save_path,
+                    graphs_save_path=graphs_save_path,
                 )
 
-                np.save(losses_npy_path, np.array([losses_g, losses_d]))
-
-                # torch.save(self.lir_generator.state_dict(), "")
-                # torch.save(self.lir_discriminator.state_dict(), "")
+                if self.record_name is not None:
+                    np.save(losses_npy_path, np.array([losses_g, losses_d]))
+                    torch.save(self.lir_generator.state_dict(), self.lir_generator_pth_path)
+                    torch.save(self.lir_discriminator.state_dict(), self.lir_discriminator_pth_path)
