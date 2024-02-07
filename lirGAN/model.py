@@ -86,8 +86,8 @@ class LirGeometricLoss(nn.Module):
         iou_score = torch.sum(intersection) / torch.sum(union)
 
         generated_lir_centroid = torch.nonzero(generated_lir).float().mean(dim=0)
-        if any(torch.isnan(generated_lir_centroid)):
-            generated_lir_centroid[0], generated_lir_centroid[1] = 0, 0
+        if torch.isnan(generated_lir_centroid).any():
+            generated_lir_centroid = torch.zeros_like(generated_lir_centroid)
 
         target_lir_centroid = torch.nonzero(target_lir).float().mean(dim=0)
 
@@ -155,6 +155,10 @@ class LirGeometricLoss(nn.Module):
             feasibility_loss_2 = LirGeometricLoss.compute_feasibility_loss(
                 input_polygon, generated_lir, self.feasibility_weight
             )
+
+            assert not torch.isnan(diou_loss).any(), "diou_loss is `nan`"
+            assert not torch.isnan(feasibility_loss_1).any(), "feasibility_loss_1 is `nan`"
+            assert not torch.isnan(feasibility_loss_2).any(), "feasibility_loss_2 is `nan`"
 
             loss = bce_loss + diou_loss + feasibility_loss_1 + feasibility_loss_2
 
@@ -280,6 +284,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         log_interval: int = None,
         record_name: str = None,
         use_gradient_penalty: bool = False,
+        is_debug_mode: bool = False,
     ):
         self.epochs = epochs
         self.lir_generator = lir_generator
@@ -291,6 +296,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self.log_interval = self.LOG_INTERVAL if log_interval is None else log_interval
         self.record_name = record_name
         self.use_gradient_penalty = use_gradient_penalty
+        self.is_debug_mode = is_debug_mode
         self.is_pths_set = False
 
         self._make_dirs_and_assign_paths()
@@ -592,6 +598,14 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
     def train(self):
         """Main function to train models"""
+
+        if self.is_debug_mode:
+            from debugvisualizer.debugvisualizer import Plotter
+            from shapely.geometry import Point, Polygon
+
+            globals()["Plotter"] = Plotter
+            globals()["Point"] = Point
+            globals()["Polygon"] = Polygon
 
         losses_g = []
         losses_d = []
