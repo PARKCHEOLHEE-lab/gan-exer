@@ -285,6 +285,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         record_name: str = None,
         use_gradient_penalty: bool = False,
         is_debug_mode: bool = False,
+        is_record: bool = False,
     ):
         self.epochs = epochs
         self.lir_generator = lir_generator
@@ -297,6 +298,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self.record_name = record_name
         self.use_gradient_penalty = use_gradient_penalty
         self.is_debug_mode = is_debug_mode
+        self.is_record = is_record
         self.is_pths_set = False
 
         self._make_dirs_and_assign_paths()
@@ -312,7 +314,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
     def _make_dirs_and_assign_paths(self) -> None:
         """_summary_"""
 
-        if self.record_name is not None:
+        if self.record_name is not None and self.is_record:
             self.records_path = os.path.abspath(os.path.join(__file__, "../", "records"))
             if not os.path.isdir(self.records_path):
                 os.mkdir(self.records_path)
