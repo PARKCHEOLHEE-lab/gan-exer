@@ -164,5 +164,5 @@ if __name__ == "__main__":
 
     np.random.seed(0)
 
-    data_creator = DataCreator(creation_count=1000)
+    data_creator = DataCreator(creation_count=1500)
     data_creator.create()
