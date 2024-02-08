@@ -615,7 +615,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         polygons_save_path = None
         graphs_save_path = None
 
-        if self.record_name is not None:
+        if self.record_name is not None and self.is_record:
             losses_npy_path = os.path.join(self.records_path_losses, "losses.npy")
             if os.path.isfile(losses_npy_path):
                 losses = np.load(losses_npy_path)
@@ -645,7 +645,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             losses_d.append(avg_loss_d)
 
             if epoch % self.log_interval == 0:
-                if self.record_name is not None:
+                if self.record_name is not None and self.is_record:
                     polygons_save_path = os.path.join(self.records_path_polygons, f"polygons-{epoch}.png")
                     graphs_save_path = os.path.join(self.records_path_grpahs, f"graphs-{epoch}.png")
 
@@ -660,7 +660,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                     graphs_save_path=graphs_save_path,
                 )
 
-                if self.record_name is not None:
+                if self.record_name is not None and self.is_record:
                     np.save(losses_npy_path, np.array([losses_g, losses_d]))
                     torch.save(self.lir_generator.state_dict(), self.lir_generator_pth_path)
                     torch.save(self.lir_discriminator.state_dict(), self.lir_discriminator_pth_path)
