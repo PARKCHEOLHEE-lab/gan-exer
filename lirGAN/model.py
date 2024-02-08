@@ -9,6 +9,7 @@ from lirGAN.data.data_creator import DataCreator
 from lirGAN.data import utils
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.modules.loss import _Loss
+from torch.optim import lr_scheduler
 from IPython.display import clear_output
 
 
@@ -284,6 +285,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         log_interval: int = None,
         record_name: str = None,
         use_gradient_penalty: bool = False,
+        use_lr_scheduler: bool = False,
         is_debug_mode: bool = False,
         is_record: bool = False,
     ):
@@ -297,19 +299,15 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self.log_interval = self.LOG_INTERVAL if log_interval is None else log_interval
         self.record_name = record_name
         self.use_gradient_penalty = use_gradient_penalty
+        self.use_lr_scheduler = use_lr_scheduler
         self.is_debug_mode = is_debug_mode
         self.is_record = is_record
-        self.is_pths_set = False
 
         self._make_dirs_and_assign_paths()
         self._set_latest_pths()
-
-        if not self.is_pths_set and self.initial_weights_key is not None:
-            self._set_initial_weights(self.lir_generator, self.lir_discriminator, self.initial_weights_key)
-
-        self.lir_generator_optimizer, self.lir_discriminator_optimizer = self._get_optimizers(
-            self.lir_generator, self.lir_discriminator, self.LEARNING_RATE, self.BETAS
-        )
+        self._set_lr_schedulers()
+        self._set_initial_weights()
+        self._set_optimizers()
 
     def _make_dirs_and_assign_paths(self) -> None:
         """_summary_"""
@@ -349,6 +347,8 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
     def _set_latest_pths(self) -> None:
         """_summary_"""
 
+        self.is_pths_set = False
+
         if (
             self.record_name is not None
             and os.path.isfile(self.lir_generator_pth_path)
@@ -369,45 +369,35 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
             self.is_pths_set = True
 
-    def _get_optimizers(
-        self,
-        lir_generator: LirGenerator,
-        lir_discriminator: LirDiscriminator,
-        learning_rate: float,
-        betas: Tuple[float],
-    ) -> Tuple[torch.optim.Optimizer, torch.optim.Optimizer]:
-        """Set and return optimizers
+    def _set_lr_schedulers(self) -> None:
+        """_summary_"""
 
-        Args:
-            lir_generator (LirGenerator): generator model
-            lir_discriminator (LirDiscriminator): discriminator model
+        if self.use_lr_scheduler:
+            self.scheduler_g = lr_scheduler.ReduceLROnPlateau(
+                self.lir_generator_optimizer, patience=5, verbose=True, factor=0.5
+            )
+            self.scheduler_d = lr_scheduler.ReduceLROnPlateau(
+                self.lir_discriminator_optimizer, patience=5, verbose=True, factor=0.5
+            )
 
-        Returns:
-            Tuple[torch.optim.Optimizer, torch.optim.Optimizer]: Optimizers
-        """
+    def _set_optimizers(self) -> None:
+        self.lir_generator_optimizer = torch.optim.Adam(
+            self.lir_generator.parameters(), lr=self.LEARNING_RATE, betas=self.BETAS
+        )
+        self.lir_discriminator_optimizer = torch.optim.Adam(
+            self.lir_discriminator.parameters(), lr=self.LEARNING_RATE, betas=self.BETAS
+        )
 
-        lir_generator_optimizer = torch.optim.Adam(lir_generator.parameters(), lr=learning_rate, betas=betas)
-        lir_discriminator_optimizer = torch.optim.Adam(lir_discriminator.parameters(), lr=learning_rate, betas=betas)
+    def _set_initial_weights(self) -> None:
+        """_summary_"""
 
-        return lir_generator_optimizer, lir_discriminator_optimizer
-
-    def _set_initial_weights(
-        self, lir_generator: LirGenerator, lir_discriminator: LirDiscriminator, initial_weights_key: str
-    ) -> None:
-        """_summary_
-
-        Args:
-            lir_generator (LirGenerator): _description_
-            lir_discriminator (LirDiscriminator): _description_
-            initial_weights_key (str): _description_
-        """
-
-        if initial_weights_key == self.XAVIER:
-            lir_generator.apply(self.initialize_weights_xavier)
-            lir_discriminator.apply(self.initialize_weights_xavier)
-        elif initial_weights_key == self.HE:
-            lir_generator.apply(self.initialize_weights_he)
-            lir_discriminator.apply(self.initialize_weights_he)
+        if not self.is_pths_set and self.initial_weights_key is not None:
+            if self.initial_weights_key == self.XAVIER:
+                self.lir_generator.apply(self.initialize_weights_xavier)
+                self.lir_discriminator.apply(self.initialize_weights_xavier)
+            elif self.initial_weights_key == self.HE:
+                self.lir_generator.apply(self.initialize_weights_he)
+                self.lir_discriminator.apply(self.initialize_weights_he)
 
     def _compute_gradient_penalty(
         self, target_lirs: torch.Tensor, generated_lirs: torch.Tensor, input_polygons: torch.Tensor
@@ -643,6 +633,10 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             avg_loss_d = np.mean(losses_d_per_epoch)
             losses_g.append(avg_loss_g)
             losses_d.append(avg_loss_d)
+
+            if self.use_lr_scheduler:
+                self.scheduler_g.step(avg_loss_g)
+                self.scheduler_d.step(avg_loss_d)
 
             if epoch % self.log_interval == 0:
                 if self.record_name is not None and self.is_record:
