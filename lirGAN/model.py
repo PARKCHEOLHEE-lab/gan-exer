@@ -305,9 +305,9 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
         self._make_dirs_and_assign_paths()
         self._set_latest_pths()
-        self._set_lr_schedulers()
         self._set_initial_weights()
         self._set_optimizers()
+        self._set_lr_schedulers()
 
     def _make_dirs_and_assign_paths(self) -> None:
         """_summary_"""
@@ -630,6 +630,19 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                 loss_g = self._train_lir_generator(input_polygons, target_lirs)
                 losses_g_per_epoch.append(loss_g.item())
                 losses_d_per_epoch.append(loss_d.item())
+
+                self.evaluate(
+                    batch_size_to_evaulate=3,
+                    batch_size_to_evaulate_trained_data=3,
+                    input_polygons=input_polygons,
+                    target_lirs=target_lirs,
+                    losses_g=losses_g_per_epoch,
+                    losses_d=losses_d_per_epoch,
+                    polygons_save_path=None,
+                    graphs_save_path=None,
+                )
+
+                clear_output(wait=True)
 
             avg_loss_g = np.mean(losses_g_per_epoch)
             avg_loss_d = np.mean(losses_d_per_epoch)
