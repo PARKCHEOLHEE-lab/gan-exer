@@ -381,6 +381,8 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             )
 
     def _set_optimizers(self) -> None:
+        """_summary_"""
+
         self.lir_generator_optimizer = torch.optim.Adam(
             self.lir_generator.parameters(), lr=self.LEARNING_RATE, betas=self.BETAS
         )
