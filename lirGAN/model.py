@@ -310,7 +310,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self._set_lr_schedulers()
 
     def _make_dirs_and_assign_paths(self) -> None:
-        """_summary_"""
+        """Make directories to record"""
 
         if self.record_name is not None and self.is_record:
             self.records_path = os.path.abspath(os.path.join(__file__, "../", "records"))
@@ -345,7 +345,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             self.lir_discriminator_pth_path = os.path.join(self.pths_path_with_name, "lir_discriminator.pth")
 
     def _set_latest_pths(self) -> None:
-        """_summary_"""
+        """Set path to save checkpoint of models"""
 
         self.is_pths_set = False
 
@@ -370,18 +370,18 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             self.is_pths_set = True
 
     def _set_lr_schedulers(self) -> None:
-        """_summary_"""
+        """Set each scheduler for optimizers"""
 
         if self.use_lr_scheduler:
             self.scheduler_g = lr_scheduler.ReduceLROnPlateau(
-                self.lir_generator_optimizer, patience=5, verbose=True, factor=0.5
+                self.lir_generator_optimizer, patience=5, verbose=True, factor=0.1
             )
             self.scheduler_d = lr_scheduler.ReduceLROnPlateau(
-                self.lir_discriminator_optimizer, patience=5, verbose=True, factor=0.5
+                self.lir_discriminator_optimizer, patience=5, verbose=True, factor=0.1
             )
 
     def _set_optimizers(self) -> None:
-        """_summary_"""
+        """Set each optimizer for models"""
 
         self.lir_generator_optimizer = torch.optim.Adam(
             self.lir_generator.parameters(), lr=self.LEARNING_RATE, betas=self.BETAS
@@ -391,7 +391,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         )
 
     def _set_initial_weights(self) -> None:
-        """_summary_"""
+        """Set initial weights by xavier or he keys"""
 
         if not self.is_pths_set and self.initial_weights_key is not None:
             if self.initial_weights_key == self.XAVIER:
@@ -404,14 +404,15 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
     def _compute_gradient_penalty(
         self, target_lirs: torch.Tensor, generated_lirs: torch.Tensor, input_polygons: torch.Tensor
     ) -> torch.Tensor:
-        """_summary_
+        """Compute the gradient penalty to enforce the Lipschitz constraint.
 
         Args:
-            target_lirs (torch.Tensor): _description_
-            generated_lirs (torch.Tensor): _description_
+            target_lirs (torch.Tensor): target rectangles
+            generated_lirs (torch.Tensor): generated rectangles
+            input_polygons (torch.Tensor): input polygon boundaries to predict
 
         Returns:
-            torch.Tensor: _description_
+            torch.Tensor: The computed gradient penalty.
         """
 
         batch_size, *_ = target_lirs.size()
@@ -437,39 +438,39 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         return gradient_penalty
 
     def _get_noise(self, size: Tuple[int]) -> torch.Tensor:
-        """_summary_
+        """Returns the noise corresponding to the given size.
 
         Args:
-            size (Tuple[int]): _description_
+            size (Tuple[int]): noise shape
 
         Returns:
-            torch.Tensor: _description_
+            torch.Tensor: noise
         """
 
         return torch.randn(size).to(self.DEVICE)
 
     def _get_smoothed_labels(self, labels: torch.Tensor, smoothing: float = 0.1) -> torch.Tensor:
-        """_summary_
+        """Applies label smoothing to reduce model overconfidence.
 
         Args:
-            labels (torch.Tensor): _description_
-            smoothing (float, optional): _description_. Defaults to 0.1.
+            labels (torch.Tensor): Original labels.
+            smoothing (float): Smoothing factor, default is 0.1.
 
         Returns:
-            torch.Tensor: _description_
+            torch.Tensor: Smoothed labels.
         """
 
         return labels * (1 - smoothing) + 0.5 * smoothing
 
-    def _train_lir_discriminator(self, input_polygons: torch.Tensor, target_lirs: torch.Tensor):
-        """_summary_
+    def _train_lir_discriminator(self, input_polygons: torch.Tensor, target_lirs: torch.Tensor) -> torch.Tensor:
+        """Trains the discriminator
 
         Args:
-            input_polygon (torch.Tensor): _description_
-            target_lir (torch.Tensor): _description_
+            input_polygons (torch.Tensor): input polygon boundaries to predict
+            target_lirs (torch.Tensor): target rectangles
 
         Returns:
-            _type_: _description_
+            torch.Tensor: discriminator's loss
         """
 
         noise = self._get_noise((input_polygons.shape[0], self.NOISE_DIM))
@@ -491,7 +492,17 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
         return loss_d
 
-    def _train_lir_generator(self, input_polygons: torch.Tensor, target_lirs: torch.Tensor):
+    def _train_lir_generator(self, input_polygons: torch.Tensor, target_lirs: torch.Tensor) -> torch.Tensor:
+        """Trains the generator
+
+        Args:
+            input_polygons (torch.Tensor): input polygon boundaries to predict
+            target_lirs (torch.Tensor): target rectangles
+
+        Returns:
+            torch.Tensor: generator's loss
+        """
+
         noise = self._get_noise((input_polygons.shape[0], self.NOISE_DIM))
         generated_lir = self.lir_generator(noise, input_polygons)
 
@@ -519,11 +530,24 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         batch_size_to_evaulate_trained_data: int,
         input_polygons: torch.Tensor,
         target_lirs: torch.Tensor,
-        losses_g,
-        losses_d,
-        polygons_save_path,
-        graphs_save_path,
-    ):
+        losses_g: List[torch.Tensor],
+        losses_d: List[torch.Tensor],
+        polygons_save_path: str,
+        graphs_save_path: str,
+    ) -> None:
+        """Evaluates and shows how well the model works by creating pictures and graphs.
+
+        Args:
+            batch_size_to_evaulate (int): size to evaluate and visualize
+            batch_size_to_evaulate_trained_data (int): size to evaluate and visualize
+            input_polygons (torch.Tensor): input polygon boundaries to predict
+            target_lirs (torch.Tensor): target rectangles
+            losses_g (List[torch.Tensor]): average losses of generator
+            losses_d (List[torch.Tensor]): average losses of discriminator
+            polygons_save_path (str): path to save generated polygon figure
+            graphs_save_path (str): path to save losses figure
+        """
+
         self.lir_generator.eval()
         self.lir_discriminator.eval()
 
@@ -590,7 +614,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self.lir_generator.train()
         self.lir_discriminator.train()
 
-    def train(self):
+    def train(self) -> None:
         """Main function to train models"""
 
         if self.is_debug_mode:
