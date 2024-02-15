@@ -1,4 +1,5 @@
 import os
+import cv2
 import torch
 import torch.nn as nn
 import numpy as np
@@ -58,12 +59,16 @@ class LirGeometricLoss(nn.Module):
         bce_weight: float = 1.0,
         diou_weight: float = 1.0,
         feasibility_weight: float = 1.0,
+        connectivity_weight: float = 1.0,
+        rectangular_shape_weight: float = 1.0,
     ):
         super().__init__()
 
         self.bce_weight = bce_weight
         self.diou_weight = diou_weight
         self.feasibility_weight = feasibility_weight
+        self.connectivity_weight = connectivity_weight
+        self.rectangular_shape_weight = rectangular_shape_weight
 
         self.bce_loss_function = nn.BCEWithLogitsLoss()
 
@@ -130,6 +135,52 @@ class LirGeometricLoss(nn.Module):
 
         return feasibility_loss
 
+    @staticmethod
+    def compute_connectivity_loss(generated_lir: torch.Tensor, connectivity_weight: float) -> torch.Tensor:
+        """compute the connectivity loss that checks whether the generated rectangle is a single piece
+
+        Args:
+            generated_lir (torch.Tensor): generated rectangle
+            connectivity_weight (float): weight to multiply in the connectivity loss.
+
+        Returns:
+            torch.Tensor: connectivity loss
+        """
+
+        generated_lir_np = (generated_lir.detach().cpu().numpy() > 0.5).astype("uint8").squeeze()
+
+        num_labels_gen, _ = cv2.connectedComponents(generated_lir_np)
+        num_labels_gen -= 1
+
+        connectivity_loss = torch.tensor(abs(num_labels_gen - 1)).float().to(generated_lir.device)
+
+        return connectivity_loss * connectivity_weight
+
+    @staticmethod
+    def compute_rectangular_shape_loss(generated_lir: torch.Tensor, rectangular_shape_weight: float) -> torch.Tensor:
+        """_summary_
+
+        Args:
+            generated_lir (torch.Tensor): _description_
+            rectangular_shape_weight (float): _description_
+
+        Returns:
+            torch.Tensor: _description_
+        """
+
+        generated_lir = (generated_lir > 0.5).float().squeeze()
+        generated_lir_vertices = torch.nonzero(generated_lir).detach().cpu().numpy()
+        generated_lir_convex_hull = cv2.convexHull(generated_lir_vertices).reshape(-1, 2)
+
+        inner_angles = utils.calculate_polygon_angles(generated_lir_convex_hull)
+
+        inner_angles_loss = abs(sum(inner_angles) - 360)
+        vertices_count_loss = abs(len(inner_angles) - 4)
+
+        rectangular_shape_loss = torch.tensor(inner_angles_loss + vertices_count_loss).float().to(generated_lir.device)
+
+        return rectangular_shape_loss * rectangular_shape_weight
+
     def forward(
         self, input_polygons: torch.Tensor, generated_lirs: torch.Tensor, target_lirs: torch.Tensor
     ) -> torch.Tensor:
@@ -150,18 +201,22 @@ class LirGeometricLoss(nn.Module):
 
             diou_loss = LirGeometricLoss.compute_diou_loss(generated_lir, target_lir, self.diou_weight)
 
-            feasibility_loss_1 = LirGeometricLoss.compute_feasibility_loss(
-                target_lir, generated_lir, self.feasibility_weight
-            )
-            feasibility_loss_2 = LirGeometricLoss.compute_feasibility_loss(
+            feasibility_loss = LirGeometricLoss.compute_feasibility_loss(
                 input_polygon, generated_lir, self.feasibility_weight
             )
 
-            assert not torch.isnan(diou_loss).any(), "diou_loss is `nan`"
-            assert not torch.isnan(feasibility_loss_1).any(), "feasibility_loss_1 is `nan`"
-            assert not torch.isnan(feasibility_loss_2).any(), "feasibility_loss_2 is `nan`"
+            connectivity_loss = LirGeometricLoss.compute_connectivity_loss(generated_lir, self.connectivity_weight)
 
-            loss = bce_loss + diou_loss + feasibility_loss_1 + feasibility_loss_2
+            rectangular_shape_loss = LirGeometricLoss.compute_rectangular_shape_loss(
+                generated_lir, self.rectangular_shape_weight
+            )
+
+            assert not torch.isnan(diou_loss).any(), "diou_loss is `nan`"
+            assert not torch.isnan(feasibility_loss).any(), "feasibility_loss is `nan`"
+            assert not torch.isnan(connectivity_loss).any(), "connectivity_loss is `nan`"
+            assert not torch.isnan(rectangular_shape_loss).any(), "rectangular_shape_loss is `nan`"
+
+            loss = bce_loss + diou_loss + feasibility_loss + connectivity_loss
 
             total_loss += loss
 
@@ -374,10 +429,10 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
         if self.use_lr_scheduler:
             self.scheduler_g = lr_scheduler.ReduceLROnPlateau(
-                self.lir_generator_optimizer, patience=5, verbose=True, factor=0.1
+                self.lir_generator_optimizer, patience=3, verbose=True, factor=0.1
             )
             self.scheduler_d = lr_scheduler.ReduceLROnPlateau(
-                self.lir_discriminator_optimizer, patience=5, verbose=True, factor=0.1
+                self.lir_discriminator_optimizer, patience=3, verbose=True, factor=0.1
             )
 
     def _set_optimizers(self) -> None:

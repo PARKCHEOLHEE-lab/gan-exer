@@ -176,3 +176,34 @@ def plot_losses(losses_g, losses_d, figsize=(10, 5), plot_avg_line=False, save_p
         plt.savefig(save_path)
 
     plt.show()
+
+
+def calculate_polygon_angles(polygon_vertices: np.ndarray) -> List[float]:
+    """_summary_
+
+    Args:
+        polygon_vertices (np.ndarray): _description_
+
+    Returns:
+        List[float]: _description_
+    """
+
+    polygon_angles = []
+
+    for vi in range(len(polygon_vertices)):
+        p0 = polygon_vertices[(vi - 1) % len(polygon_vertices)]
+        p1 = polygon_vertices[vi]
+        p2 = polygon_vertices[(vi + 1) % len(polygon_vertices)]
+
+        d1 = p0 - p1
+        d2 = p2 - p1
+
+        dot_prod = np.dot(d1, d2)
+        norm_prod = np.linalg.norm(d1) * np.linalg.norm(d2)
+
+        cos_angle = dot_prod / norm_prod
+        angle = np.arccos(cos_angle) * (180.0 / np.pi)
+
+        polygon_angles.append(angle)
+
+    return polygon_angles
