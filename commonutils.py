@@ -17,7 +17,6 @@ def create_animation_gif(
         format (str, optional): Format of the image files (default is "png").
         loop (int, optional): Number of loops for the GIF (0 for infinite looping, default is 0).
         duration (int, optional): Duration (in milliseconds) of each frame (default is 1).
-        margin_duration (int, optional): Duration (in milliseconds) of each frame (default is 2000).
     """
 
     files = sorted(os.listdir(images_directory), key=lambda x: int(x.split("-")[-1].split(".")[0]))
