@@ -335,9 +335,9 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self.is_record = is_record
 
         self._make_dirs_and_assign_paths()
+        self._set_optimizers()
         self._set_latest_pths()
         self._set_initial_weights()
-        self._set_optimizers()
         self._set_lr_schedulers()
 
     def _make_dirs_and_assign_paths(self) -> None:
@@ -375,6 +375,13 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             self.lir_generator_pth_path = os.path.join(self.pths_path_with_name, "lir_generator.pth")
             self.lir_discriminator_pth_path = os.path.join(self.pths_path_with_name, "lir_discriminator.pth")
 
+            self.lir_generator_optimizer_pth_path = os.path.join(
+                self.pths_path_with_name, "lir_generator_optimizer.pth"
+            )
+            self.lir_discriminator_optimizer_pth_path = os.path.join(
+                self.pths_path_with_name, "lir_discriminator_optimizer.pth"
+            )
+
     def _set_latest_pths(self) -> None:
         """Set path to save checkpoint of models"""
 
@@ -399,6 +406,19 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
             print()
 
             self.is_pths_set = True
+
+        if (
+            self.record_name is not None
+            and os.path.isfile(self.lir_generator_optimizer_pth_path)
+            and os.path.isfile(self.lir_discriminator_optimizer_pth_path)
+        ):
+            self.lir_generator_optimizer.load_state_dict(torch.load(self.lir_generator_optimizer_pth_path))
+            self.lir_discriminator_optimizer.load_state_dict(torch.load(self.lir_discriminator_optimizer_pth_path))
+
+            print("Set optimizers' status from existing .pths:")
+            print(f"  generator_optimizer_pth_path:     {self.lir_generator_optimizer_pth_path}")
+            print(f"  discriminator_optimizer_pth_path: {self.lir_discriminator_optimizer_pth_path}")
+            print()
 
     def _set_lr_schedulers(self) -> None:
         """Set each scheduler for optimizers"""
@@ -728,3 +748,5 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                     np.save(losses_npy_path, np.array([losses_g, losses_d]))
                     torch.save(self.lir_generator.state_dict(), self.lir_generator_pth_path)
                     torch.save(self.lir_discriminator.state_dict(), self.lir_discriminator_pth_path)
+                    torch.save(self.lir_generator_optimizer.state_dict(), self.lir_generator_optimizer_pth_path)
+                    torch.save(self.lir_discriminator_optimizer.state_dict(), self.lir_discriminator_optimizer_pth_path)
