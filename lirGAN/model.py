@@ -6,7 +6,7 @@ import numpy as np
 
 from typing import List, Tuple
 from lirGAN.config import ModelConfig
-from lirGAN.data.data_creator import DataCreator
+from lirGAN.data.data_creator import DataCreator, LargestInscribedRectangle
 from lirGAN.data import utils
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.modules.loss import _Loss
@@ -303,7 +303,7 @@ class LirDiscriminator(nn.Module, ModelConfig):
         return self.main(x).view(-1, 1).squeeze(1)
 
 
-class LirGanTrainer(ModelConfig, WeightsInitializer):
+class LirGanTrainer(ModelConfig, WeightsInitializer, LargestInscribedRectangle):
     def __init__(
         self,
         epochs: int,
@@ -319,6 +319,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         use_lr_scheduler: bool = False,
         is_debug_mode: bool = False,
         is_record: bool = False,
+        with_ground_truth: bool = False,
     ):
         self.epochs = epochs
         self.lir_generator = lir_generator
@@ -333,6 +334,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self.use_lr_scheduler = use_lr_scheduler
         self.is_debug_mode = is_debug_mode
         self.is_record = is_record
+        self.with_ground_truth = with_ground_truth
 
         self._make_dirs_and_assign_paths()
         self._set_optimizers()
@@ -585,6 +587,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         losses_d: List[torch.Tensor],
         polygons_save_path: str,
         graphs_save_path: str,
+        with_ground_truth: bool = False,
     ) -> None:
         """Evaluates and shows how well the model works by creating pictures and graphs.
 
@@ -603,6 +606,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
         self.lir_discriminator.eval()
 
         with torch.no_grad():
+            ground_truths = []
             binary_grids = []
             if len(self.lir_dataloader) > 1:
                 data_creator = DataCreator(creation_count=None)
@@ -626,6 +630,20 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                         .to(self.DEVICE)
                     )
 
+                    if with_ground_truth:
+                        lir = self._get_largest_inscribed_rectangle(
+                            coordinates=random_coordinates,
+                            canvas_size=data_creator.canvas_size,
+                            lir_rotation_degree_interval=data_creator.lir_rotation_degree_interval,
+                            use_ray=False,
+                        )
+
+                        binary_grid_shaped_lir = utils.get_binary_grid_shaped_polygon(
+                            np.array(lir.exterior.coords, dtype=np.int32), data_creator.canvas_size
+                        )
+
+                        ground_truths.append(binary_grid_shaped_polygon + binary_grid_shaped_lir)
+
                     noise = self._get_noise((1, self.NOISE_DIM))
                     generated_lir = self.lir_generator(noise, random_input_polygon) > 0.5
                     generated_lir = generated_lir.squeeze().detach().cpu().numpy().astype(int)
@@ -634,7 +652,10 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                     merged = binary_grid_shaped_polygon + generated_lir
                     binary_grids.append(merged)
 
-                for input_polygon in input_polygons[:batch_size_to_evaulate_trained_data]:
+                for input_polygon, target_lir in zip(
+                    input_polygons[:batch_size_to_evaulate_trained_data],
+                    target_lirs[:batch_size_to_evaulate_trained_data],
+                ):
                     noise = self._get_noise((1, self.NOISE_DIM))
                     generated_lir = self.lir_generator(noise, input_polygon) > 0.5
                     generated_lir = generated_lir.squeeze().detach().cpu().numpy().astype(int)
@@ -645,6 +666,9 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
 
                     merged = input_polygon + generated_lir
                     binary_grids.append(merged)
+
+                    if with_ground_truth:
+                        ground_truths.append(input_polygon + target_lir.squeeze().detach().cpu().numpy().astype(int))
 
             else:
                 noise = self._get_noise((input_polygons.shape[0], self.NOISE_DIM))
@@ -660,6 +684,10 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                 binary_grids.extend([input_polygon + target_lir, input_polygon + generated_lir])
 
             utils.plot_binary_grids(binary_grids, save_path=polygons_save_path)
+
+            if with_ground_truth:
+                utils.plot_binary_grids(ground_truths, save_path=polygons_save_path)
+
             utils.plot_losses(losses_g=losses_g, losses_d=losses_d, save_path=graphs_save_path)
 
         self.lir_generator.train()
@@ -715,6 +743,7 @@ class LirGanTrainer(ModelConfig, WeightsInitializer):
                     losses_d=losses_d_per_epoch,
                     polygons_save_path=None,
                     graphs_save_path=None,
+                    with_ground_truth=self.with_ground_truth,
                 )
 
                 clear_output(wait=True)
