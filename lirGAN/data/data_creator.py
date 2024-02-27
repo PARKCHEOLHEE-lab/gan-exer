@@ -133,6 +133,7 @@ class DataCreator(DataCreatorHelper):
                 lir = self._get_largest_inscribed_rectangle(
                     coordinates=random_coordinates,
                     canvas_size=self.canvas_size,
+                    lir_rotation_degree_interval=self.lir_rotation_degree_interval,
                 )
 
                 binary_grid_shaped_polygon = utils.get_binary_grid_shaped_polygon(
