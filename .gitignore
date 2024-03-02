@@ -5,3 +5,5 @@ _*
 graphGAN/
 lirGAN/records/
 lirGAN/pths/
+
+deepSDF/data/shapenet-core
