@@ -1,5 +1,8 @@
 import os
+import time
 import imageio
+
+from typing import Callable
 
 
 def create_animation_gif(
@@ -28,3 +31,24 @@ def create_animation_gif(
         images_data.append(data)
 
     imageio.mimwrite(save_path, images_data, format=".gif", duration=duration, loop=loop)
+
+
+def runtime_calculator(func: Callable) -> Callable:
+    """A decorator function for measuring the runtime of another function.
+
+    Args:
+        func (Callable): Function to measure
+
+    Returns:
+        Callable: Decorator
+    """
+
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        runtime = end_time - start_time
+        print(f"The function {func.__name__} took {runtime} seconds to run.")
+        return result
+
+    return wrapper
