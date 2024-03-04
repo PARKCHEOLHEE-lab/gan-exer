@@ -6,5 +6,4 @@ graphGAN/
 lirGAN/records/
 lirGAN/pths/
 
-deepSDF/data/shapenet-core
-shapenet-core.zip
+deepSDF/data/raw/
