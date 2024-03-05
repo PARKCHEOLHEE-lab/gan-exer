@@ -17,7 +17,7 @@ class SDFdataset(Dataset, Configuration):
     def __len__(self) -> int:
         return len(self.sdf_dataset)
 
-    def __getitem__(self, index) -> Tuple[torch.Tensor]:
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor]:
         xyz, sdf = self.sdf_dataset[index]
 
         return xyz.to(self.DEVICE), sdf.to(self.DEVICE)
