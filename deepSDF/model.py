@@ -33,14 +33,16 @@ class SDFdataset(Dataset, Configuration):
             List[torch.Tensor]: _description_
         """
 
-        lir_dataset: List[torch.Tensor]
-        lir_dataset = []
+        sdf_dataset: List[torch.Tensor] = []
 
         for file_name in os.listdir(data_path):
-            lir_data_path = os.path.join(data_path, file_name)
-            lir_dataset.append(torch.tensor(np.load(lir_data_path), dtype=torch.float))
+            if file_name.endswith(".npz"):
+                sdf_data_path = os.path.join(data_path, file_name)
+                data = np.load(sdf_data_path)
+                xyz, sdf = data["xyz"], data["sdf"]
+                sdf_dataset.append((torch.tensor(xyz, dtype=torch.float), torch.tensor(sdf, dtype=torch.float)))
 
         if slicer < np.inf:
-            return lir_dataset[:slicer]
+            return sdf_dataset[:slicer]
 
-        return lir_dataset
+        return sdf_dataset
