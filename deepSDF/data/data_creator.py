@@ -3,6 +3,7 @@ import ray
 import trimesh
 import numpy as np
 import commonutils
+import point_cloud_utils as pcu
 
 from typing import Tuple
 
@@ -46,34 +47,38 @@ class DataCreatorHelper:
 
     @staticmethod
     @commonutils.runtime_calculator
-    def sample_surface_points(
-        mesh: trimesh.Trimesh, n_surface_sampling: int, mesh_visible_faces: dict = None
+    def sample_pts(
+        mesh: trimesh.Trimesh,
+        n_surface_sampling: int,
+        n_bbox_sampling: int,
+        n_volume_sampling: int,
+        sigma: float = 0.01,
     ) -> np.ndarray:
         """
         Sample a given number of points uniformly from the surface of a mesh.
 
         Args:
             mesh (trimesh.Trimesh): The mesh from which to sample points.
-            num_samples (int): The number of points to sample.
+            n_surface_sampling (int): The number of points to sample from the surface.
+            n_bbox_sampling (int): The number of points to sample from the bounding box.
+            n_volume_sampling (int): The number of points to sample from the volume.
 
         Returns:
             np.ndarray: An array of sampled points (shape: [num_samples, 3]).
         """
 
-        points, face_indices = trimesh.sample.sample_surface(mesh, n_surface_sampling)
+        surface_points_sampled, _ = trimesh.sample.sample_surface(mesh, n_surface_sampling)
+        surface_points_sampled += np.random.normal(0, sigma, surface_points_sampled.shape)
 
-        if mesh_visible_faces is not None:
-            filtered_points = []
-            filtered_indices = []
+        bbox_points_sampled = np.random.uniform(low=mesh.bounds[0], high=mesh.bounds[1], size=[n_bbox_sampling, 3])
 
-            for point, face_index in zip(points, face_indices):
-                if mesh_visible_faces[face_index] == 1:
-                    filtered_points.append(point)
-                    filtered_indices.append(face_index)
+        volume_points_sampled = np.random.rand(n_volume_sampling, 3) * max(mesh.bounds[1] - mesh.bounds[0])
+        volume_points_sampled -= np.mean(volume_points_sampled, axis=0)
+        volume_points_sampled += np.mean(mesh.vertices, axis=0)
 
-            points = np.array(filtered_points)
+        xyz = np.concatenate([surface_points_sampled, bbox_points_sampled, volume_points_sampled], axis=0)
 
-        return points
+        return xyz
 
     @staticmethod
     def load_mesh(path: str, normalize: bool = False, map_z_to_y: bool = False) -> trimesh.Trimesh:
@@ -105,6 +110,10 @@ class DataCreatorHelper:
             mesh.vertices[:, [1, 2]] = mesh.vertices[:, [2, 1]]
 
         mesh.path = path
+
+        if not mesh.is_watertight:
+            vertices, faces = pcu.make_mesh_watertight(mesh.vertices, mesh.faces, resolution=100000)
+            mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
 
         return mesh
 
@@ -141,37 +150,6 @@ class DataCreatorHelper:
 
     @staticmethod
     @commonutils.runtime_calculator
-    def compute_visible_faces(mesh: trimesh.Trimesh, n_sphere_sampling: int, sphere_scaler: float = 1.5) -> dict:
-        """_summary_
-
-        Args:
-            mesh (trimesh.Trimesh): _description_
-            n_sphere_sampling (int): _description_
-            sphere_scaler (float, optional): _description_. Defaults to 1.5.
-
-        Returns:
-            dict: _description_
-        """
-
-        mesh_visible_faces = {i: 0 for i in range(len(mesh.faces))}
-
-        raycasting_origins = DataCreatorHelper.sample_surface_points(mesh.bounding_sphere, n_sphere_sampling)
-        raycasting_origins *= sphere_scaler
-
-        visibilities = [
-            DataCreatorHelper._is_visibile_face.remote(mesh, raycasting_origins, face_index)
-            for face_index in range(len(mesh.triangles))
-        ]
-
-        for visibility in ray.get(visibilities):
-            face_index, is_visible = visibility
-            if is_visible:
-                mesh_visible_faces[face_index] = 1
-
-        return mesh_visible_faces
-
-    @staticmethod
-    @commonutils.runtime_calculator
     def compute_sdf(mesh: trimesh.Trimesh, points: np.ndarray, sigma: float = 0.01) -> np.ndarray:
         """
         Compute the Signed Distance Function (SDF) for a set of points given a mesh.
@@ -183,8 +161,6 @@ class DataCreatorHelper:
         Returns:
             np.ndarray: An array of SDF values for the given points.
         """
-        if not mesh.is_watertight:
-            mesh = DataCreatorHelper.get_closed_mesh(mesh)
 
         noise = np.random.normal(0, sigma, points.shape)
         noisy_points = points + noise
@@ -196,14 +172,16 @@ class DataCreator(DataCreatorHelper):
     def __init__(
         self,
         n_surface_sampling: int,
-        n_sphere_sampling: int,
+        n_bbox_sampling: int,
+        n_volume_sampling: int,
         raw_data_path: str,
         save_path: str,
         compute_visibility: bool = False,
         is_debug_mode: bool = False,
     ) -> None:
         self.n_surface_sampling = n_surface_sampling
-        self.n_sphere_sampling = n_sphere_sampling
+        self.n_bbox_sampling = n_bbox_sampling
+        self.n_volume_sampling = n_volume_sampling
         self.raw_data_path = raw_data_path
         self.save_path = save_path
         self.compute_visibility = compute_visibility
@@ -232,12 +210,8 @@ class DataCreator(DataCreatorHelper):
             path = os.path.join(self.raw_data_path, file)
 
             mesh = self.load_mesh(path, normalize=True, map_z_to_y=True)
-            mesh_visible_faces = {i: 1 for i in range(len(mesh.faces))}
 
-            if self.compute_visibility:
-                mesh_visible_faces = self.compute_visible_faces(mesh, self.n_sphere_sampling)
-
-            xyz = self.sample_surface_points(mesh, self.n_surface_sampling, mesh_visible_faces=mesh_visible_faces)
+            xyz = self.sample_pts(mesh, self.n_surface_sampling, self.n_bbox_sampling, self.n_volume_sampling)
             sdf = self.compute_sdf(mesh, xyz)
 
             np.savez(os.path.join(self.save_path, str(fi) + ".npz"), xyz=xyz, sdf=sdf)
@@ -247,8 +221,9 @@ class DataCreator(DataCreatorHelper):
 
 if __name__ == "__main__":
     data_creator = DataCreator(
-        n_surface_sampling=250000,
-        n_sphere_sampling=1000,
+        n_surface_sampling=10000,
+        n_bbox_sampling=10000,
+        n_volume_sampling=3000,
         raw_data_path="deepSDF/data/raw",
         save_path="deepSDF/data/processed",
         compute_visibility=False,
@@ -256,3 +231,5 @@ if __name__ == "__main__":
     )
 
     data_creator.create()
+
+    # pvol, psurf, pbbox

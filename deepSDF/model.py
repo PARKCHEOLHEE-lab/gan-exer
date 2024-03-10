@@ -1,5 +1,7 @@
 import os
 import torch
+import torch.nn as nn
+import torch.nn.init as init
 import numpy as np
 
 from typing import List, Tuple
@@ -46,3 +48,52 @@ class SDFdataset(Dataset, Configuration):
             return sdf_dataset[:slicer]
 
         return sdf_dataset
+
+
+class DeepSDF(nn.Module):
+    def __init__(self, z_dim=256, data_shape=200):
+        super().__init__()
+
+        self.main_1 = nn.Sequential(
+            nn.Linear(z_dim + 3, 512),
+            nn.ReLU(True),
+            nn.Linear(512, 512),
+            nn.ReLU(True),
+            nn.Linear(512, 512),
+            nn.ReLU(True),
+            nn.Linear(512, 512),
+            nn.ReLU(True),
+            nn.Linear(512, 253),
+        )
+
+        self.main_2 = nn.Sequential(
+            nn.Linear(512, 512),
+            nn.ReLU(True),
+            nn.Linear(512, 512),
+            nn.ReLU(True),
+            nn.Linear(512, 512),
+            nn.ReLU(True),
+            nn.Linear(512, 1),
+            nn.Tanh(),
+        )
+
+        self.latent_vectors = nn.Parameter(torch.FloatTensor(data_shape, z_dim))
+
+        # Initialize with a Gaussian distribution
+        init.normal_(self.latent_vectors, mean=0, std=0.01)
+
+    def forward(self, ind, xyz):
+        latent_codes = self.latent_vectors[ind].repeat(xyz.shape[0], 1)
+
+        cxyz_1 = torch.cat((latent_codes, xyz), dim=1)
+        x1 = self.main_1(cxyz_1)
+
+        # skip connecetion
+        cxyz_2 = torch.cat((x1, cxyz_1), dim=1)
+        x2 = self.main_2(cxyz_2)
+
+        return x2
+
+    @property
+    def latent_vectors(self):
+        return self.latent_vectors
