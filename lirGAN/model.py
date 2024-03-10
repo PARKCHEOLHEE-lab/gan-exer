@@ -202,21 +202,21 @@ class LirGeometricLoss(nn.Module):
 class WeightsInitializer:
     @staticmethod
     def initialize_weights_xavier(m):
-        if isinstance(m, (nn.Conv3d, nn.ConvTranspose3d)):
+        if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
             nn.init.xavier_normal_(m.weight)
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.BatchNorm3d):
+        elif isinstance(m, nn.BatchNorm2d):
             nn.init.constant_(m.weight, 1)
             nn.init.constant_(m.bias, 0)
 
     @staticmethod
     def initialize_weights_he(m):
-        if isinstance(m, (nn.Conv3d, nn.ConvTranspose3d)):
+        if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
             nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.BatchNorm3d):
+        elif isinstance(m, nn.BatchNorm2d):
             nn.init.constant_(m.weight, 1)
             nn.init.constant_(m.bias, 0)
 
