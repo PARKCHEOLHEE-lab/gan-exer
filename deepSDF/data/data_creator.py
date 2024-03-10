@@ -194,11 +194,19 @@ class DataCreatorHelper:
 
 class DataCreator(DataCreatorHelper):
     def __init__(
-        self, n_surface_sampling: int, n_sphere_sampling: int, raw_data_path: str, is_debug_mode: bool = False
+        self,
+        n_surface_sampling: int,
+        n_sphere_sampling: int,
+        raw_data_path: str,
+        save_path: str,
+        compute_visibility: bool = False,
+        is_debug_mode: bool = False,
     ) -> None:
         self.n_surface_sampling = n_surface_sampling
         self.n_sphere_sampling = n_sphere_sampling
         self.raw_data_path = raw_data_path
+        self.save_path = save_path
+        self.compute_visibility = compute_visibility
         self.is_debug_mode = is_debug_mode
 
         if self.is_debug_mode:
@@ -211,11 +219,12 @@ class DataCreator(DataCreatorHelper):
     def create(self) -> None:
         """_summary_"""
 
+        if not os.path.exists(self.save_path):
+            os.mkdir(self.save_path)
+
         ray.init()
 
-        sdf_list = []
-        xyz_list = []
-
+        fi = 0
         for file in os.listdir(self.raw_data_path):
             if not file.endswith(".obj"):
                 continue
@@ -223,13 +232,17 @@ class DataCreator(DataCreatorHelper):
             path = os.path.join(self.raw_data_path, file)
 
             mesh = self.load_mesh(path, normalize=True, map_z_to_y=True)
-            mesh_visible_faces = self.compute_visible_faces(mesh, self.n_sphere_sampling)
+            mesh_visible_faces = {i: 1 for i in range(len(mesh.faces))}
+
+            if self.compute_visibility:
+                mesh_visible_faces = self.compute_visible_faces(mesh, self.n_sphere_sampling)
 
             xyz = self.sample_surface_points(mesh, self.n_surface_sampling, mesh_visible_faces=mesh_visible_faces)
             sdf = self.compute_sdf(mesh, xyz)
 
-            xyz_list.append(xyz[np.where(sdf != np.nan)])
-            sdf_list.append(sdf[np.where(sdf != np.nan)])
+            np.savez(os.path.join(self.save_path, str(fi) + ".npz"), xyz=xyz, sdf=sdf)
+
+            fi += 1
 
 
 if __name__ == "__main__":
@@ -237,18 +250,9 @@ if __name__ == "__main__":
         n_surface_sampling=250000,
         n_sphere_sampling=1000,
         raw_data_path="deepSDF/data/raw",
+        save_path="deepSDF/data/processed",
+        compute_visibility=False,
         is_debug_mode=True,
     )
+
     data_creator.create()
-
-    # mesh = DataCreatorHelper.load_mesh(r"deepSDF\data\raw\wave.obj", normalize=True, map_y_to_z=True)
-    # mesh_surface_sampled_points, _ = DataCreatorHelper.get_sampled_points_from_mesh(mesh, 100)
-    # mesh_sphere_sampled_points, _ = DataCreatorHelper.get_sampled_points_from_mesh(mesh.bounding_sphere, 1000)
-
-    # # sdfs = compute_sdf(mesh, sampled_points)
-
-    # # print(sdfs)
-
-    # plot_mesh(mesh, points=mesh_sphere_sampled_points, only_points=False)
-
-    # # verts, faces, _, _ = measure.marching_cubes(sdfs, level=0)
