@@ -1,4 +1,0 @@
-ㅁ DeepSDF with Skyscrapers.
-    1. Data Preparation
-        . 5 modeling data that are obj-formatted data
-        . coordinates normalization to 0 ~ 1 values
