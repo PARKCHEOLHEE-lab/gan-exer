@@ -228,7 +228,7 @@ class DataCreator(DataCreatorHelper):
             mesh = self.load_mesh(path, normalize=True, map_z_to_y=True)
 
             xyz = self.sample_pts(mesh, self.n_surface_sampling, self.n_bbox_sampling, self.n_volume_sampling)
-            sdf = self.compute_sdf(mesh, xyz)
+            sdf = np.expand_dims(self.compute_sdf(mesh, xyz), axis=1)
 
             np.savez(os.path.join(self.save_path, str(fi) + ".npz"), xyz=xyz, sdf=sdf)
 
