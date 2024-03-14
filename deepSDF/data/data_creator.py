@@ -81,7 +81,9 @@ class DataCreatorHelper:
         return xyz
 
     @staticmethod
-    def load_mesh(path: str, normalize: bool = False, map_z_to_y: bool = False) -> trimesh.Trimesh:
+    def load_mesh(
+        path: str, normalize: bool = False, map_z_to_y: bool = False, check_watertight: bool = True
+    ) -> trimesh.Trimesh:
         """Load mesh data from .obj file
 
         Args:
@@ -111,7 +113,7 @@ class DataCreatorHelper:
 
         mesh.path = path
 
-        if not mesh.is_watertight:
+        if check_watertight and not mesh.is_watertight:
             vertices, faces = pcu.make_mesh_watertight(mesh.vertices, mesh.faces, resolution=100000)
             mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
 
@@ -149,8 +151,19 @@ class DataCreatorHelper:
         return face_index, hit_count > 0
 
     @staticmethod
+    @ray.remote
+    def compute_sdf_batch(noisy_points_batch, mesh_vertices, mesh_faces):
+        mesh_vertices_np = np.array(mesh_vertices).astype(np.float32)  # or np.float64 if higher precision is needed
+        mesh_faces_np = np.array(mesh_faces).astype(np.int32)  # or np.int64 if needed
+        sdf, _, _ = pcu.signed_distance_to_mesh(noisy_points_batch, mesh_vertices_np, mesh_faces_np)
+
+        return sdf
+
+    @staticmethod
     @commonutils.runtime_calculator
-    def compute_sdf(mesh: trimesh.Trimesh, points: np.ndarray, sigma: float = 0.01) -> np.ndarray:
+    def compute_sdf(
+        mesh: trimesh.Trimesh, points: np.ndarray, sigma: float = 0.01, with_noise: bool = True
+    ) -> np.ndarray:
         """
         Compute the Signed Distance Function (SDF) for a set of points given a mesh.
 
@@ -162,10 +175,15 @@ class DataCreatorHelper:
             np.ndarray: An array of SDF values for the given points.
         """
 
+        if not with_noise:
+            sigma = 0
+
         noise = np.random.normal(0, sigma, points.shape)
         noisy_points = points + noise
 
-        return mesh.nearest.signed_distance(noisy_points)
+        sdf, *_ = pcu.signed_distance_to_mesh(noisy_points, mesh.vertices, mesh.faces)
+
+        return sdf
 
 
 class DataCreator(DataCreatorHelper):
@@ -176,7 +194,6 @@ class DataCreator(DataCreatorHelper):
         n_volume_sampling: int,
         raw_data_path: str,
         save_path: str,
-        compute_visibility: bool = False,
         is_debug_mode: bool = False,
     ) -> None:
         self.n_surface_sampling = n_surface_sampling
@@ -184,7 +201,6 @@ class DataCreator(DataCreatorHelper):
         self.n_volume_sampling = n_volume_sampling
         self.raw_data_path = raw_data_path
         self.save_path = save_path
-        self.compute_visibility = compute_visibility
         self.is_debug_mode = is_debug_mode
 
         if self.is_debug_mode:
@@ -225,11 +241,8 @@ if __name__ == "__main__":
         n_bbox_sampling=10000,
         n_volume_sampling=3000,
         raw_data_path="deepSDF/data/raw",
-        save_path="deepSDF/data/processed",
-        compute_visibility=False,
+        save_path="deepSDF/data/preprocessed",
         is_debug_mode=True,
     )
 
     data_creator.create()
-
-    # pvol, psurf, pbbox
