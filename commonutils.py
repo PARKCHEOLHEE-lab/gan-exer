@@ -52,3 +52,19 @@ def runtime_calculator(func: Callable) -> Callable:
         return result
 
     return wrapper
+
+
+def add_debugvisualizer(globals_dict: dict) -> None:
+    """Add libs for debugging to the global namespace.
+
+    Args:
+        globals_dict (dict): The global namespace.
+    """
+
+    from debugvisualizer.debugvisualizer import Plotter
+    from shapely import geometry
+    import trimesh
+
+    globals_dict["Plotter"] = Plotter
+    globals_dict["geometry"] = geometry
+    globals_dict["trimesh"] = trimesh
