@@ -1,13 +1,22 @@
-import os
 import torch
 import random
 import numpy as np
 
 
-class Configuration:
-    """Configuration related to the DeepSDF model"""
+class DataConfiguration:
+    N_TOTAL_SAMPING = 32**3
 
-    DATA_PATH = os.path.join("")
+    RAW_DATA_PATH = "deepSDF/data/raw"
+    SAVE_DATA_PATH = "deepSDF/data/preprocessed"
+
+
+class ModelConfiguration:
+    BATCH_SIZE = 32
+    LATENT_SIZE = 128
+
+
+class Configuration(DataConfiguration, ModelConfiguration):
+    """Configuration related to the DeepSDF model"""
 
     DEVICE = "cpu"
     if torch.cuda.is_available():
