@@ -1,11 +1,10 @@
 import os
-import ray
 import trimesh
 import numpy as np
 import commonutils
 import point_cloud_utils as pcu
 
-from typing import Tuple
+from deepSDF.config import Configuration
 
 
 class DataCreatorHelper:
@@ -53,6 +52,7 @@ class DataCreatorHelper:
         n_bbox_sampling: int,
         n_volume_sampling: int,
         sigma: float = 0.01,
+        with_surface_points_noise: bool = True,
     ) -> np.ndarray:
         """
         Sample a given number of points uniformly from the surface of a mesh.
@@ -67,14 +67,15 @@ class DataCreatorHelper:
             np.ndarray: An array of sampled points (shape: [num_samples, 3]).
         """
 
+        if not with_surface_points_noise:
+            sigma = 0
+
         surface_points_sampled, _ = trimesh.sample.sample_surface(mesh, n_surface_sampling)
         surface_points_sampled += np.random.normal(0, sigma, surface_points_sampled.shape)
 
         bbox_points_sampled = np.random.uniform(low=mesh.bounds[0], high=mesh.bounds[1], size=[n_bbox_sampling, 3])
 
-        volume_points_sampled = np.random.rand(n_volume_sampling, 3) * max(mesh.bounds[1] - mesh.bounds[0])
-        volume_points_sampled -= np.mean(volume_points_sampled, axis=0)
-        volume_points_sampled += np.mean(mesh.vertices, axis=0)
+        volume_points_sampled = np.random.rand(n_volume_sampling, 3) * 2 - 1
 
         xyz = np.concatenate([surface_points_sampled, bbox_points_sampled, volume_points_sampled], axis=0)
 
@@ -119,89 +120,28 @@ class DataCreatorHelper:
 
         return mesh
 
-    @staticmethod
-    @ray.remote
-    def _is_visibile_face(
-        mesh: trimesh.Trimesh, raycasting_origins: trimesh.caching.TrackedArray, face_index: int
-    ) -> Tuple[int, bool]:
-        """_summary_
-
-        Args:
-            mesh (trimesh.Trimesh): _description_
-            ray_origins (trimesh.caching.TrackedArray): _description_
-            face_index (int): _description_
-
-        Returns:
-            Tuple[int, bool]: _description_
-        """
-
-        face = mesh.triangles[face_index]
-        hit_count = 0
-
-        for point in face:
-            raycasting_directions = -(raycasting_origins - point)
-            faces_hit = mesh.ray.intersects_first(raycasting_origins, raycasting_directions)
-
-            if face_index in faces_hit:
-                hit_count += 1
-
-            if hit_count > 0:
-                break
-
-        return face_index, hit_count > 0
-
-    @staticmethod
-    @ray.remote
-    def compute_sdf_batch(noisy_points_batch, mesh_vertices, mesh_faces):
-        mesh_vertices_np = np.array(mesh_vertices).astype(np.float32)  # or np.float64 if higher precision is needed
-        mesh_faces_np = np.array(mesh_faces).astype(np.int32)  # or np.int64 if needed
-        sdf, _, _ = pcu.signed_distance_to_mesh(noisy_points_batch, mesh_vertices_np, mesh_faces_np)
-
-        return sdf
-
-    @staticmethod
-    @commonutils.runtime_calculator
-    def compute_sdf(
-        mesh: trimesh.Trimesh, points: np.ndarray, sigma: float = 0.01, with_noise: bool = True
-    ) -> np.ndarray:
-        """
-        Compute the Signed Distance Function (SDF) for a set of points given a mesh.
-
-        Args:
-            mesh (trimesh.Trimesh): The mesh for which to compute the SDF.
-            points (np.ndarray): An array of points (shape: [N, 3]) for which to compute the SDF values.
-
-        Returns:
-            np.ndarray: An array of SDF values for the given points.
-        """
-
-        if not with_noise:
-            sigma = 0
-
-        noise = np.random.normal(0, sigma, points.shape)
-        noisy_points = points + noise
-
-        sdf, *_ = pcu.signed_distance_to_mesh(noisy_points, mesh.vertices, mesh.faces)
-
-        return sdf
-
 
 class DataCreator(DataCreatorHelper):
     def __init__(
         self,
-        n_surface_sampling: int,
-        n_bbox_sampling: int,
-        n_volume_sampling: int,
+        n_total_sampling: int,
         raw_data_path: str,
         save_path: str,
         is_debug_mode: bool = False,
     ) -> None:
-        self.n_surface_sampling = n_surface_sampling
-        self.n_bbox_sampling = n_bbox_sampling
-        self.n_volume_sampling = n_volume_sampling
         self.raw_data_path = raw_data_path
         self.save_path = save_path
         self.is_debug_mode = is_debug_mode
+
+        self.n_total_sampling = n_total_sampling
+        self.n_surface_sampling = int(self.n_total_sampling * 0.3)
+        self.n_bbox_sampling = int(self.n_total_sampling * 0.5)
+        self.n_volume_sampling = int(self.n_total_sampling * 0.2)
+
+        if self.n_total_sum < self.n_total_sampling:
+            self.n_volume_sampling += self.n_total_sampling - self.n_total_sum
+
+        assert self.n_total_sum == self.n_total_sampling, "The sum of sampling `n` is not equal to `n_total_sampling`"
 
         if self.is_debug_mode:
             from debugvisualizer.debugvisualizer import Plotter
@@ -210,13 +150,15 @@ class DataCreator(DataCreatorHelper):
             globals()["Plotter"] = Plotter
             globals()["geometry"] = geometry
 
+    @property
+    def n_total_sum(self) -> int:
+        return self.n_surface_sampling + self.n_bbox_sampling + self.n_volume_sampling
+
     def create(self) -> None:
         """_summary_"""
 
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
-
-        ray.init()
 
         fi = 0
         for file in os.listdir(self.raw_data_path):
@@ -228,20 +170,19 @@ class DataCreator(DataCreatorHelper):
             mesh = self.load_mesh(path, normalize=True, map_z_to_y=True)
 
             xyz = self.sample_pts(mesh, self.n_surface_sampling, self.n_bbox_sampling, self.n_volume_sampling)
-            sdf = np.expand_dims(self.compute_sdf(mesh, xyz), axis=1)
+            sdf, *_ = pcu.signed_distance_to_mesh(xyz, mesh.vertices, mesh.faces)
+            sdf = np.expand_dims(sdf, axis=1)
 
-            np.savez(os.path.join(self.save_path, str(fi) + ".npz"), xyz=xyz, sdf=sdf)
+            np.savez(os.path.join(self.save_path, str(fi) + ".npz"), xyz=xyz, sdf=sdf, cls=fi)
 
             fi += 1
 
 
 if __name__ == "__main__":
     data_creator = DataCreator(
-        n_surface_sampling=10000,
-        n_bbox_sampling=10000,
-        n_volume_sampling=3000,
-        raw_data_path="deepSDF/data/raw",
-        save_path="deepSDF/data/preprocessed",
+        n_total_sampling=Configuration.N_TOTAL_SAMPING,
+        raw_data_path=Configuration.RAW_DATA_PATH,
+        save_path=Configuration.SAVE_DATA_PATH,
         is_debug_mode=True,
     )
 
