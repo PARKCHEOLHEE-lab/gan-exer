@@ -4,10 +4,13 @@ import numpy as np
 
 
 class DataConfiguration:
-    N_TOTAL_SAMPING = 32**3
-
     RAW_DATA_PATH = "deepSDF/data/raw"
     SAVE_DATA_PATH = "deepSDF/data/preprocessed"
+
+    N_TOTAL_SAMPLING = 32**3
+    N_SURFACE_SAMPLING_RATIO = 0.3
+    N_BBOX_SAMPLING_RATIO = 0.2
+    N_VOLUME_SAMPLING_RATIO = 0.5
 
 
 class ModelConfiguration:
