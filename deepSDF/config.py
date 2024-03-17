@@ -23,10 +23,22 @@ class DataConfiguration:
         N_SURFACE_SAMPLING + N_BBOX_SAMPLING + N_VOLUME_SAMPLING
     ) == N_TOTAL_SAMPLING, "The sum of sampling `n` is not equal to `n_total_sampling`"
 
+    RECONSTRUCT_RESOLUTION = 256
+
 
 class ModelConfiguration:
-    BATCH_SIZE = 32
+    BATCH_SIZE = 64
     LATENT_SIZE = 128
+    CLAMP_VALUE = 0.1
+
+    EPOCHS = 300
+    LOG_INTERVAL = 1
+
+    LEARNING_RATE_MODEL = 0.00001
+    LEARNING_RATE_LATENT = 0.001
+
+    TRAIN_DATASET_RATIO = 0.8
+    VAL_DATASET_RATIO = 0.2
 
 
 class Configuration(DataConfiguration, ModelConfiguration):
