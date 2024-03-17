@@ -124,7 +124,6 @@ class DataCreatorHelper:
 class DataCreator(DataCreatorHelper):
     def __init__(
         self,
-        n_total_sampling: int,
         n_surface_sampling: int,
         n_bbox_sampling: int,
         n_volume_sampling: int,
@@ -136,26 +135,12 @@ class DataCreator(DataCreatorHelper):
         self.save_path = save_path
         self.is_debug_mode = is_debug_mode
 
-        self.n_total_sampling = n_total_sampling
-        self.n_surface_sampling = int(n_total_sampling * n_surface_sampling)
-        self.n_bbox_sampling = int(n_total_sampling * n_bbox_sampling)
-        self.n_volume_sampling = int(n_total_sampling * n_volume_sampling)
-
-        if self.n_total_sum < self.n_total_sampling:
-            self.n_volume_sampling += self.n_total_sampling - self.n_total_sum
-
-        assert self.n_total_sum == self.n_total_sampling, "The sum of sampling `n` is not equal to `n_total_sampling`"
+        self.n_surface_sampling = n_surface_sampling
+        self.n_bbox_sampling = n_bbox_sampling
+        self.n_volume_sampling = n_volume_sampling
 
         if self.is_debug_mode:
-            from debugvisualizer.debugvisualizer import Plotter
-            from shapely import geometry
-
-            globals()["Plotter"] = Plotter
-            globals()["geometry"] = geometry
-
-    @property
-    def n_total_sum(self) -> int:
-        return self.n_surface_sampling + self.n_bbox_sampling + self.n_volume_sampling
+            commonutils.add_debugvisualizer(globals())
 
     def create(self) -> None:
         """_summary_"""
@@ -183,13 +168,12 @@ class DataCreator(DataCreatorHelper):
 
 if __name__ == "__main__":
     data_creator = DataCreator(
-        n_total_sampling=Configuration.N_TOTAL_SAMPLING,
-        n_surface_sampling=Configuration.N_SURFACE_SAMPLING_RATIO,
-        n_bbox_sampling=Configuration.N_BBOX_SAMPLING_RATIO,
-        n_volume_sampling=Configuration.N_VOLUME_SAMPLING_RATIO,
+        n_surface_sampling=Configuration.N_SURFACE_SAMPLING,
+        n_bbox_sampling=Configuration.N_BBOX_SAMPLING,
+        n_volume_sampling=Configuration.N_VOLUME_SAMPLING,
         raw_data_path=Configuration.RAW_DATA_PATH,
         save_path=Configuration.SAVE_DATA_PATH,
-        is_debug_mode=True,
+        is_debug_mode=False,
     )
 
     data_creator.create()
