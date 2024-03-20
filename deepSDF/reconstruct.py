@@ -27,6 +27,10 @@ class ReconstructorHelper:
         # https://github.com/maurock/DeepSDF/blob/main/utils/utils_deepsdf.py#L84-L94
 
         grid_sdf = sdf.reshape(grid_size_axis, grid_size_axis, grid_size_axis).detach().cpu().numpy()
+
+        if not (grid_sdf.min() <= 0.00 <= grid_sdf.max()):
+            return None, None
+
         vertices, faces, _, _ = skimage.measure.marching_cubes(grid_sdf, level=0.00)
 
         if normalize:
@@ -37,7 +41,7 @@ class ReconstructorHelper:
         return vertices, faces
 
 
-class Reconstructor(Configuration):
+class Reconstructor(ReconstructorHelper):
     def __init__(self, model, resolution):
         self.model = model
         self.resolution = resolution
