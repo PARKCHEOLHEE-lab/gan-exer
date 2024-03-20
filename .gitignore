@@ -9,3 +9,5 @@ lirGAN/pths/
 
 deepSDF/data/raw/
 deepSDF/data/preprocessed/
+
+runs/
