@@ -50,6 +50,8 @@ class Configuration(DataConfiguration, ModelConfiguration):
 
     DEFAULT_SEED = 777
 
+    LOG_DIR = "deepSDF/runs"
+
     @staticmethod
     def set_seed(seed: int = DEFAULT_SEED):
         torch.manual_seed(seed)
