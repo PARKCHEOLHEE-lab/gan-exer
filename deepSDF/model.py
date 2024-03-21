@@ -1,4 +1,5 @@
 import os
+import time
 import torch
 import trimesh
 import datetime
@@ -323,6 +324,8 @@ class SDFdecoderTrainer(Configuration):
             start = self.all_states["epoch"] + 1
 
         for epoch in range(start, Configuration.EPOCHS + 1):
+            start_time_per_epoch = time.time()
+
             avg_train_loss = self._train_each_epoch(
                 sdf_decoder=self.sdf_decoder,
                 sdf_train_dataloader=self.sdf_train_dataloader,
@@ -359,7 +362,7 @@ class SDFdecoderTrainer(Configuration):
 
                     torch.save(states, self.all_states_path)
 
-                    print(f"Epoch: {epoch}, Train Loss: {avg_train_loss}, Val Loss: {avg_val_loss}")
+                    print(f"Epoch: {epoch}th Train Loss: {avg_train_loss}, Val Loss: {avg_val_loss}")
 
                 else:
                     states = torch.load(self.all_states_path)
@@ -369,6 +372,8 @@ class SDFdecoderTrainer(Configuration):
 
                 self.summary_writer.add_scalar("Loss/train", avg_train_loss, epoch)
                 self.summary_writer.add_scalar("Loss/val", avg_val_loss, epoch)
+
+            print(f"Epoch: {epoch}th epoch took {time.time() - start_time_per_epoch} seconds")
 
 
 if __name__ == "__main__":
