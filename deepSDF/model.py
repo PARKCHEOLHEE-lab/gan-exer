@@ -235,7 +235,9 @@ class SDFdecoderTrainer(Configuration):
         """
 
         losses = []
-        for xyz_batch, sdf_batch, cls_batch in tqdm(sdf_train_dataloader, desc=f"Training in `{epoch}th` epoch"):
+        for xyz_batch, sdf_batch, cls_batch in tqdm(
+            sdf_train_dataloader, desc=f"Training in `{epoch}th` epoch", leave=False
+        ):
             sdf_batch = sdf_batch.unsqueeze(1)
 
             pred = sdf_decoder(cls_batch, xyz_batch)
@@ -272,7 +274,9 @@ class SDFdecoderTrainer(Configuration):
 
         sdf_decoder.eval()
         with torch.no_grad():
-            for xyz_batch, sdf_batch, cls_batch in tqdm(sdf_val_dataloader, desc=f"Evaluating in `{epoch}th` epoch"):
+            for xyz_batch, sdf_batch, cls_batch in tqdm(
+                sdf_val_dataloader, desc=f"Evaluating in `{epoch}th` epoch", leave=False
+            ):
                 sdf_batch = sdf_batch.unsqueeze(1)
 
                 pred = sdf_decoder(cls_batch, xyz_batch)
@@ -290,7 +294,7 @@ class SDFdecoderTrainer(Configuration):
 
             sdf = torch.tensor([]).to(Configuration.DEVICE)
 
-            for coords_batch in tqdm(coords_batches, desc=f"Reconstructing in `{epoch}th` epoch"):
+            for coords_batch in tqdm(coords_batches, desc=f"Reconstructing in `{epoch}th` epoch", leave=False):
                 cls = torch.tensor([0] * coords_batch.shape[0], dtype=torch.long).to(Configuration.DEVICE)
                 pred = sdf_decoder(cls, coords_batch)
                 if sum(sdf.shape) == 0:
