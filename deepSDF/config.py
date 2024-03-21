@@ -1,3 +1,4 @@
+import os
 import torch
 import random
 import numpy as np
@@ -44,13 +45,25 @@ class ModelConfiguration:
 class Configuration(DataConfiguration, ModelConfiguration):
     """Configuration related to the DeepSDF model"""
 
+    def __iter__(self):
+        for attr in dir(self):
+            if not callable(getattr(self, attr)) and not attr.startswith("_"):
+                yield attr, getattr(self, attr)
+
     DEVICE = "cpu"
     if torch.cuda.is_available():
         DEVICE = "cuda"
 
     DEFAULT_SEED = 777
+    SEED_SET = None
 
     LOG_DIR = "deepSDF/runs"
+
+    RECONSTRUCT_DIR = os.path.join(LOG_DIR, "reconstructed")
+    STATE_DIR = os.path.join(LOG_DIR, "states")
+
+    RECONSTRUCT_PATH = os.path.join(RECONSTRUCT_DIR, "reconstructed.obj")
+    ALL_STATES_PATH = os.path.join(STATE_DIR, "all_states.pth")
 
     @staticmethod
     def set_seed(seed: int = DEFAULT_SEED):
@@ -67,3 +80,5 @@ class Configuration(DataConfiguration, ModelConfiguration):
         print(f"  Seeds set for torch on GPU : {torch.cuda.initial_seed()}")
         print(f"  Seeds set for numpy        : {seed}")
         print(f"  Seeds set for random       : {seed}")
+
+        Configuration.SEED_SET = seed
