@@ -161,8 +161,9 @@ class SDFdecoderTrainer(Configuration):
         if not os.path.exists(self.state_dir):
             os.mkdir(self.state_dir)
 
+        self.all_states_path = os.path.join(self.state_dir, "all_states.pth")
         if self.has_pre_trained_path:
-            self.all_states = torch.load(os.path.join(self.state_dir, "all_states.pth"))
+            self.all_states = torch.load(self.all_states_path)
 
         self.obj_path = os.path.join(self.reconstruct_dir, "reconstructed.obj")
 
@@ -352,15 +353,15 @@ class SDFdecoderTrainer(Configuration):
                         "configuration": {k: v for k, v in Configuration()},
                     }
 
-                    torch.save(states, Configuration.ALL_STATES_PATH)
+                    torch.save(states, self.all_states_path)
 
                     print(f"Epoch: {epoch}, Train Loss: {avg_train_loss}, Val Loss: {avg_val_loss}")
 
                 else:
-                    states = torch.load(Configuration.ALL_STATES_PATH)
+                    states = torch.load(self.all_states_path)
                     states.update({"epoch": epoch})
 
-                    torch.save(states, Configuration.ALL_STATES_PATH)
+                    torch.save(states, self.all_states_path)
 
                 self.summary_writer.add_scalar("Loss/train", avg_train_loss, epoch)
                 self.summary_writer.add_scalar("Loss/val", avg_val_loss, epoch)
