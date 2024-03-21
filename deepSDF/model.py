@@ -372,7 +372,6 @@ if __name__ == "__main__":
         sdf_decoder=sdf_decoder,
         is_debug_mode=False,
         seed=77777,
-        pre_trained_path=r"deepSDF\runs\2024-03-21_20-38-40",
     )
 
     sdf_trainer.train()
