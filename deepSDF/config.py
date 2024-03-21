@@ -1,4 +1,3 @@
-import os
 import torch
 import random
 import numpy as np
@@ -32,7 +31,7 @@ class ModelConfiguration:
     LATENT_SIZE = 128
     CLAMP_VALUE = 0.1
 
-    EPOCHS = 300
+    EPOCHS = 20
     LOG_INTERVAL = 1
 
     LEARNING_RATE_MODEL = 0.00001
@@ -58,12 +57,6 @@ class Configuration(DataConfiguration, ModelConfiguration):
     SEED_SET = None
 
     LOG_DIR = "deepSDF/runs"
-
-    RECONSTRUCT_DIR = os.path.join(LOG_DIR, "reconstructed")
-    STATE_DIR = os.path.join(LOG_DIR, "states")
-
-    RECONSTRUCT_PATH = os.path.join(RECONSTRUCT_DIR, "reconstructed.obj")
-    ALL_STATES_PATH = os.path.join(STATE_DIR, "all_states.pth")
 
     @staticmethod
     def set_seed(seed: int = DEFAULT_SEED):

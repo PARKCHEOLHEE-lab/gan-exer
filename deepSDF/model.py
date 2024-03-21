@@ -153,18 +153,18 @@ class SDFdecoderTrainer(Configuration):
 
         self.summary_writer = SummaryWriter(log_dir=self.log_dir)
 
-        self.reconstruct_dir = Configuration.RECONSTRUCT_DIR
-        if not os.path.exists(Configuration.RECONSTRUCT_DIR):
-            os.mkdir(Configuration.RECONSTRUCT_DIR)
+        self.reconstruct_dir = os.path.join(self.log_dir, "reconstructed")
+        if not os.path.exists(self.reconstruct_dir):
+            os.mkdir(self.reconstruct_dir)
 
-        self.state_dir = Configuration.STATE_DIR
-        if not os.path.exists(Configuration.STATE_DIR):
-            os.mkdir(Configuration.STATE_DIR)
+        self.state_dir = os.path.join(self.log_dir, "states")
+        if not os.path.exists(self.state_dir):
+            os.mkdir(self.state_dir)
 
         if self.has_pre_trained_path:
-            self.all_states = torch.load(Configuration.ALL_STATES_PATH)
+            self.all_states = torch.load(os.path.join(self.state_dir, "all_states.pth"))
 
-        self.obj_path = Configuration.RECONSTRUCT_PATH
+        self.obj_path = os.path.join(self.reconstruct_dir, "reconstructed.obj")
 
     def _set_dataloaders(self):
         train_dataset, val_dataset = random_split(
@@ -360,6 +360,8 @@ class SDFdecoderTrainer(Configuration):
                     states = torch.load(Configuration.ALL_STATES_PATH)
                     states.update({"epoch": epoch})
 
+                    torch.save(states, Configuration.ALL_STATES_PATH)
+
                 self.summary_writer.add_scalar("Loss/train", avg_train_loss, epoch)
                 self.summary_writer.add_scalar("Loss/val", avg_val_loss, epoch)
 
@@ -372,6 +374,7 @@ if __name__ == "__main__":
         sdf_decoder=sdf_decoder,
         is_debug_mode=False,
         seed=77777,
+        pre_trained_path=r"deepSDF\runs\2024-03-21_22-11-18",
     )
 
     sdf_trainer.train()
