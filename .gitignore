@@ -11,3 +11,4 @@ deepSDF/data/raw/
 deepSDF/data/preprocessed/
 
 runs/
+*.3dmbak
