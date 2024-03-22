@@ -4,8 +4,8 @@ import numpy as np
 
 
 class DataConfiguration:
-    RAW_DATA_PATH = "deepSDF/data/raw"
-    SAVE_DATA_PATH = "deepSDF/data/preprocessed"
+    RAW_DATA_PATH = "deepSDF/data/raw-skyscrapers"
+    SAVE_DATA_PATH = "deepSDF/data/preprocessed-skyscrapers"
 
     N_TOTAL_SAMPLING = 64**3
     N_SURFACE_SAMPLING_RATIO = 0.3
