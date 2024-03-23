@@ -3,6 +3,7 @@ import ray
 import trimesh
 import numpy as np
 import commonutils
+import multiprocessing
 import point_cloud_utils as pcu
 
 from tqdm import tqdm
@@ -13,10 +14,17 @@ from deepSDF.config import Configuration
 class DataCreatorHelper:
     MIN_BOUND = "min_bound"
     CENTER = "center"
+    CENTER_WITHOUT_Z = "center_without_z"
 
     @staticmethod
     @ray.remote
-    def calculate_max_length(paths: List[str], translate_mode: Union[MIN_BOUND, CENTER] = CENTER) -> float:
+    def calculate_max_length(
+        paths: List[str],
+        map_z_to_y: bool = False,
+        check_watertight: bool = True,
+        translate_mode: Union[MIN_BOUND, CENTER, CENTER_WITHOUT_Z] = CENTER_WITHOUT_Z,
+        save_html: bool = False,
+    ) -> float:
         """
         Calculate the maximum length of the given mesh.
 
@@ -27,39 +35,46 @@ class DataCreatorHelper:
             float: The maximum length of the given mesh
         """
 
+        if save_html:
+            commonutils.add_debugvisualizer(globals())
+
+        meshes = []
         max_length = 0
 
         for path in paths:
-            mesh = trimesh.load(path)
+            mesh = DataCreatorHelper.load_mesh(
+                path,
+                normalize=False,
+                map_z_to_y=map_z_to_y,
+                check_watertight=check_watertight,
+                translate_mode=translate_mode,
+            )
 
-            if isinstance(mesh, trimesh.Scene):
-                geo_list = []
-                for g in mesh.geometry.values():
-                    geo_list.append(g)
-                mesh = trimesh.util.concatenate(geo_list)
+            if not mesh.is_watertight:
+                print(f"{path} is not watertight")
+                continue
 
-            mesh.fix_normals(multibody=True)
-
-            verts = mesh.vertices
-
-            if translate_mode == DataCreatorHelper.MIN_BOUND:
-                vector = mesh.bounds[0]
-            elif translate_mode == DataCreatorHelper.CENTER:
-                vector = np.mean(verts, axis=0)
-            else:
-                raise ValueError(f"Invalid translate mode: {translate_mode}")
-
-            verts = verts - vector
-            length = np.max(np.linalg.norm(verts, axis=1))
+            length = np.max(np.linalg.norm(mesh.vertices, axis=1))
             if length > max_length:
                 max_length = length
 
-        return max_length
+            meshes.append(mesh)
+
+            if save_html:
+                save_name = os.path.basename(path).replace(".obj", ".html")
+                print(f"saving: {save_name}")
+
+                globals()["Plotter"](
+                    mesh,
+                    globals()["geometry"].Point(mesh.vertices[np.argmax(np.linalg.norm(mesh.vertices, axis=1))]),
+                    globals()["geometry"].Point(0, 0),
+                    map_z_to_y=False,
+                ).save(save_name)
+
+        return meshes, max_length
 
     @staticmethod
-    def get_normalized_mesh(
-        _mesh: trimesh.Trimesh, max_length: float = None, translate_mode: Union[MIN_BOUND, CENTER] = CENTER
-    ) -> trimesh.Trimesh:
+    def get_normalized_mesh(_mesh: trimesh.Trimesh, max_length: float = None) -> trimesh.Trimesh:
         """Normalize to 0 ~ 1 values the given mesh
 
         Args:
@@ -71,25 +86,12 @@ class DataCreatorHelper:
 
         mesh = _mesh.copy()
 
-        verts = mesh.vertices
-
-        if translate_mode == DataCreatorHelper.MIN_BOUND:
-            vector = mesh.bounds[0]
-        elif translate_mode == DataCreatorHelper.CENTER:
-            vector = np.mean(verts, axis=0)
-        else:
-            raise ValueError(f"Invalid translate mode: {translate_mode}")
-
-        verts = verts - vector
-
         if max_length is not None:
             length = max_length
         else:
-            length = np.max(np.linalg.norm(verts, axis=1))
+            length = np.max(np.linalg.norm(mesh.vertices, axis=1))
 
-        verts = verts * (1.0 / length)
-
-        mesh.vertices = verts
+        mesh.vertices = mesh.vertices * (1.0 / length)
 
         return mesh
 
@@ -110,7 +112,6 @@ class DataCreatorHelper:
         return mesh
 
     @staticmethod
-    @commonutils.runtime_calculator
     def sample_pts(
         mesh: trimesh.Trimesh,
         n_surface_sampling: int,
@@ -154,7 +155,7 @@ class DataCreatorHelper:
         map_z_to_y: bool = False,
         check_watertight: bool = True,
         max_length: float = None,
-        translate_mode: Union[MIN_BOUND, CENTER] = CENTER,
+        translate_mode: Union[MIN_BOUND, CENTER, CENTER_WITHOUT_Z] = CENTER_WITHOUT_Z,
     ) -> trimesh.Trimesh:
         """Load mesh data from .obj file
 
@@ -177,17 +178,28 @@ class DataCreatorHelper:
 
         mesh.fix_normals(multibody=True)
 
-        if normalize:
-            mesh = DataCreatorHelper.get_normalized_mesh(mesh, max_length=max_length, translate_mode=translate_mode)
+        if check_watertight and not mesh.is_watertight:
+            vertices, faces = pcu.make_mesh_watertight(mesh.vertices, mesh.faces, resolution=100000)
+            mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
 
         if map_z_to_y:
             mesh.vertices[:, [1, 2]] = mesh.vertices[:, [2, 1]]
 
-        mesh.path = path
+        if translate_mode == DataCreatorHelper.MIN_BOUND:
+            vector = mesh.bounds[0]
+        elif translate_mode == DataCreatorHelper.CENTER:
+            vector = np.mean(mesh.vertices, axis=0)
+        elif translate_mode == DataCreatorHelper.CENTER_WITHOUT_Z:
+            vector = (mesh.bounds.sum(axis=0) * 0.5) * np.array([1, 1, 0])
+        else:
+            raise ValueError(f"Invalid translate mode: {translate_mode}")
 
-        if check_watertight and not mesh.is_watertight:
-            vertices, faces = pcu.make_mesh_watertight(mesh.vertices, mesh.faces, resolution=100000)
-            mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+        mesh.vertices -= vector
+
+        if normalize:
+            mesh = DataCreatorHelper.get_normalized_mesh(mesh, max_length=max_length)
+
+        mesh.path = path
 
         return mesh
 
@@ -215,6 +227,7 @@ class DataCreator(DataCreatorHelper):
         if self.is_debug_mode:
             commonutils.add_debugvisualizer(globals())
 
+    @commonutils.runtime_calculator
     def create(self) -> None:
         """_summary_"""
 
@@ -222,40 +235,42 @@ class DataCreator(DataCreatorHelper):
             os.mkdir(self.save_path)
 
         paths = [
-            os.path.join(Configuration.RAW_DATA_PATH, file)
-            for file in os.listdir(Configuration.RAW_DATA_PATH)
-            if file.endswith(".obj")
+            os.path.join(self.raw_data_path, file) for file in os.listdir(self.raw_data_path) if file.endswith(".obj")
         ]
 
-        ray.init()
-        max_length = DataCreatorHelper.calculate_max_length.remote(paths, translate_mode=self.translate_mode)
-        max_length = ray.get(max_length)
+        ray.init(num_cpus=multiprocessing.cpu_count())
 
-        fi = 0
-        for path in tqdm(paths, desc="Preprocessing"):
-            mesh = self.load_mesh(
-                path,
-                normalize=True,
-                map_z_to_y=True,
-                check_watertight=True,
-                max_length=max_length,
-                translate_mode=self.translate_mode,
+        futures = self.calculate_max_length.remote(
+            paths, map_z_to_y=True, check_watertight=True, translate_mode=self.translate_mode, save_html=False
+        )
+
+        meshes, max_length = ray.get(futures)
+
+        cls = 0
+        for mesh in tqdm(meshes, desc="Preprocessing"):
+            normalized_mesh = self.get_normalized_mesh(mesh, max_length=max_length)
+
+            centralized_mesh = normalized_mesh.copy()
+            centralized_mesh.vertices += np.array([0.5, 0.5, 0])
+
+            xyz = self.sample_pts(
+                centralized_mesh, self.n_surface_sampling, self.n_bbox_sampling, self.n_volume_sampling
             )
 
-            if not mesh.is_watertight:
-                print(f"{path} is not watertight")
-                continue
-
-            mesh_central = mesh.copy()
-            mesh_central.vertices += np.array([0.5, 0.5, 0]) - (mesh.bounds.sum(axis=0) * 0.5) * np.array([1, 1, 0])
-
-            xyz = self.sample_pts(mesh_central, self.n_surface_sampling, self.n_bbox_sampling, self.n_volume_sampling)
-            sdf, *_ = pcu.signed_distance_to_mesh(xyz, mesh_central.vertices, mesh_central.faces)
+            sdf, *_ = pcu.signed_distance_to_mesh(xyz, centralized_mesh.vertices, centralized_mesh.faces)
             sdf = np.expand_dims(sdf, axis=1)
 
-            np.savez(os.path.join(self.save_path, str(fi) + ".npz"), xyz=xyz, sdf=sdf, cls=fi)
+            cls_name = os.path.basename(mesh.path).split(".")[0]
 
-            fi += 1
+            np.savez(
+                os.path.join(self.save_path, f"{cls_name}.npz"),
+                xyz=xyz,
+                sdf=sdf,
+                cls=cls,
+                cls_name=cls_name,
+            )
+
+            cls += 1
 
 
 if __name__ == "__main__":
@@ -265,8 +280,8 @@ if __name__ == "__main__":
         n_volume_sampling=Configuration.N_VOLUME_SAMPLING,
         raw_data_path=Configuration.RAW_DATA_PATH,
         save_path=Configuration.SAVE_DATA_PATH,
-        translate_mode=DataCreatorHelper.MIN_BOUND,
-        is_debug_mode=True,
+        translate_mode=DataCreatorHelper.CENTER_WITHOUT_Z,
+        is_debug_mode=False,
     )
 
     data_creator.create()
