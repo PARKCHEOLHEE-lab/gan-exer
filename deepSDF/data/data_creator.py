@@ -141,7 +141,6 @@ class DataCreatorHelper:
 
         bbox_points_sampled = np.random.uniform(low=mesh.bounds[0], high=mesh.bounds[1], size=[n_bbox_sampling, 3])
 
-        # volume_points_sampled = np.random.rand(n_volume_sampling, 3) * 2 - 1
         volume_points_sampled = np.random.rand(n_volume_sampling, 3)
 
         xyz = np.concatenate([surface_points_sampled, bbox_points_sampled, volume_points_sampled], axis=0)
