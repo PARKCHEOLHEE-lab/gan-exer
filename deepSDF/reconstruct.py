@@ -3,9 +3,9 @@ import trimesh
 import skimage
 import numpy as np
 
+from tqdm import tqdm
 from typing import Tuple
 from deepSDF.config import Configuration
-from deepSDF.data.data_creator import DataCreator
 
 
 class ReconstructorHelper:
@@ -41,24 +41,45 @@ class ReconstructorHelper:
         return vertices, faces
 
 
-class Reconstructor(ReconstructorHelper):
-    def __init__(self, model, resolution):
-        self.model = model
-        self.resolution = resolution
+class Reconstructor(ReconstructorHelper, Configuration):
+    def __init__(self):
+        pass
 
+    def reconstruct(self, sdf_decoder, sdf_dataset, obj_path, epoch) -> None:
+        """_summary_
 
-if __name__ == "__main__":
-    from debugvisualizer.debugvisualizer import Plotter
+        Args:
+            sdf_decoder (_type_): _description_
+            sdf_dataset (_type_): _description_
+            obj_path (_type_): _description_
+            epoch (_type_): _description_
+        """
 
-    mesh = DataCreator.load_mesh(r"deepSDF\data\raw\0.obj", normalize=True, map_z_to_y=True, check_watertight=True)
+        sdf_decoder.eval()
+        with torch.no_grad():
+            coords, grid_size_axis = self.get_volume_coords(resolution=int(self.RECONSTRUCT_RESOLUTION))
+            coords.to(self.DEVICE)
+            coords_batches = torch.split(coords, coords.shape[0] // 1000)
 
-    coords, grid_size_axis = ReconstructorHelper.get_volume_coords(resolution=130)
+            sdf = torch.tensor([]).to(self.DEVICE)
 
-    sdf = DataCreator.compute_sdf(mesh, coords.cpu().numpy(), sigma=0)
-    sdf = torch.tensor(sdf).unsqueeze(dim=1).to(Configuration.DEVICE)
+            cls_rand = int(torch.randint(low=0, high=sdf_dataset.cls_nums, size=(1,)))
 
-    vertices, faces = ReconstructorHelper.extract_mesh(grid_size_axis, sdf)
+            for coords_batch in tqdm(coords_batches, desc=f"Reconstructing in `{epoch}th` epoch", leave=False):
+                cls = torch.tensor([cls_rand] * coords_batch.shape[0], dtype=torch.long).to(self.DEVICE)
+                pred = sdf_decoder(cls, coords_batch)
+                if sum(sdf.shape) == 0:
+                    sdf = pred
+                else:
+                    sdf = torch.vstack([sdf, pred])
 
-    mesh_by_sdf = trimesh.Trimesh(vertices, faces)
+            vertices, faces = self.extract_mesh(grid_size_axis=grid_size_axis, sdf=sdf)
 
-    Plotter(mesh_by_sdf, mesh, map_z_to_y=False).save()
+            if vertices is not None and faces is not None:
+                cls_name = sdf_dataset.cls_dict[cls_rand]
+
+                mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+                mesh.vertices[:, [1, 2]] = mesh.vertices[:, [2, 1]]
+                mesh.export(obj_path.replace(".obj", f"_{epoch}_{cls_name}.obj"))
+
+        sdf_decoder.train()
