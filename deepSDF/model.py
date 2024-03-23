@@ -1,7 +1,6 @@
 import os
 import time
 import torch
-import trimesh
 import datetime
 import numpy as np
 import commonutils
@@ -15,12 +14,12 @@ from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
 from deepSDF.config import Configuration
 from torch.utils.data import Dataset, DataLoader, random_split
-from deepSDF import reconstruct
+from deepSDF.reconstruct import Reconstructor
 
 
-class SDFdataset(Dataset):
+class SDFdataset(Dataset, Configuration):
     def __init__(self, data_path: str = Configuration.SAVE_DATA_PATH):
-        self.sdf_dataset, self.cls_nums = self._get_sdf_dataset(data_path=data_path)
+        self.sdf_dataset, self.cls_nums, self.cls_dict = self._get_sdf_dataset(data_path=data_path)
 
     def __len__(self) -> int:
         return len(self.sdf_dataset)
@@ -30,7 +29,7 @@ class SDFdataset(Dataset):
         sdf = self.sdf_dataset[index, 3]
         cls = self.sdf_dataset[index, 4].long()
 
-        return xyz.to(Configuration.DEVICE), sdf.to(Configuration.DEVICE), cls.to(Configuration.DEVICE)
+        return xyz.to(self.DEVICE), sdf.to(self.DEVICE), cls.to(self.DEVICE)
 
     def _get_sdf_dataset(self, data_path: str) -> List[torch.Tensor]:
         """_summary_
@@ -47,34 +46,47 @@ class SDFdataset(Dataset):
         sdfs = torch.tensor([], dtype=torch.float)
         clss = torch.tensor([], dtype=torch.long)
 
+        cls_dict = {}
+
         for file_name in os.listdir(data_path):
             if file_name.endswith(".npz"):
-                sdf_data_path = os.path.join(data_path, file_name)
-                data = np.load(sdf_data_path)
+                npz_data_path = os.path.join(data_path, file_name)
+                data = np.load(npz_data_path)
 
                 xyz = data["xyz"]
                 sdf = data["sdf"]
-                cls = data["cls"]
+                cls = int(data["cls"])
+                cls_name = str(data["cls_name"])
+
+                if cls_name not in cls_dict:
+                    cls_dict[cls] = cls_name
 
                 if sum(xyzs.shape) == 0:
                     xyzs = torch.tensor(xyz, dtype=torch.float)
                     sdfs = torch.tensor(sdf, dtype=torch.float)
-                    clss = torch.full((xyz.shape[0], 1), int(cls), dtype=torch.long)
+                    clss = torch.full((xyz.shape[0], 1), cls, dtype=torch.long)
 
                 else:
                     xyzs = torch.vstack([xyzs, torch.tensor(xyz, dtype=torch.float)])
                     sdfs = torch.vstack([sdfs, torch.tensor(sdf, dtype=torch.float)])
-                    clss = torch.vstack([clss, torch.full((xyz.shape[0], 1), int(cls), dtype=torch.long)])
+                    clss = torch.vstack([clss, torch.full((xyz.shape[0], 1), cls, dtype=torch.long)])
 
-        assert xyzs.shape[0] == sdfs.shape[0] == clss.shape[0], "`xyzs`, `sdfs`, `clss` shape must be the same"
-        assert xyzs.shape[1] == 3, "The shape of `xyzs` must be (n, 3)"
-        assert sdfs.shape[1] == 1, "The shape of `sdfs` must be (n, 1)"
-        assert clss.shape[1] == 1, "The shape of `clss` must be (n, 1)"
+        conditions = [
+            xyzs.shape[0] == sdfs.shape[0] == clss.shape[0],
+            xyzs.shape[1] == 3,
+            sdfs.shape[1] == 1,
+            clss.shape[1] == 1,
+        ]
 
-        return torch.hstack([xyzs, sdfs, clss]), len(os.listdir(data_path))
+        assert all(conditions), "Data conditions are invalid."
+
+        sdf_dataset = torch.hstack([xyzs, sdfs, clss])
+        cls_nums = clss.max() + 1
+
+        return sdf_dataset, cls_nums, cls_dict
 
 
-class SDFdecoder(nn.Module):
+class SDFdecoder(nn.Module, Configuration):
     def __init__(self, cls_nums: int, latent_size: int = Configuration.LATENT_SIZE):
         super().__init__()
 
@@ -102,9 +114,8 @@ class SDFdecoder(nn.Module):
         )
 
         self.latent_codes = nn.Parameter(torch.FloatTensor(cls_nums, latent_size))
-
-        self.to(Configuration.DEVICE)
-        self.latent_codes.to(Configuration.DEVICE)
+        self.latent_codes.to(self.DEVICE)
+        self.to(self.DEVICE)
 
     def forward(self, i, xyz):
         cxyz_1 = torch.cat((self.latent_codes[i], xyz), dim=1)
@@ -117,7 +128,7 @@ class SDFdecoder(nn.Module):
         return x2
 
 
-class SDFdecoderTrainer(Configuration):
+class SDFdecoderTrainer(Reconstructor, Configuration):
     def __init__(
         self,
         sdf_dataset: Dataset,
@@ -148,7 +159,7 @@ class SDFdecoderTrainer(Configuration):
     def _set_summary_writer(self):
         """_summary_"""
 
-        self.log_dir = os.path.join(Configuration.LOG_DIR, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+        self.log_dir = os.path.join(self.LOG_DIR, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
         if self.has_pre_trained_path:
             self.log_dir = self.pre_trained_path
 
@@ -169,20 +180,18 @@ class SDFdecoderTrainer(Configuration):
         self.obj_path = os.path.join(self.reconstruct_dir, "reconstructed.obj")
 
     def _set_dataloaders(self):
-        train_dataset, val_dataset = random_split(
-            self.sdf_dataset, [Configuration.TRAIN_DATASET_RATIO, Configuration.VAL_DATASET_RATIO]
-        )
+        train_dataset, val_dataset = random_split(self.sdf_dataset, [self.TRAIN_DATASET_RATIO, self.VAL_DATASET_RATIO])
 
         self.sdf_train_dataloader = DataLoader(
             train_dataset,
-            batch_size=Configuration.BATCH_SIZE,
+            batch_size=self.BATCH_SIZE,
             shuffle=True,
             drop_last=True,
         )
 
         self.sdf_val_dataloader = DataLoader(
             val_dataset,
-            batch_size=Configuration.BATCH_SIZE,
+            batch_size=self.BATCH_SIZE,
             shuffle=False,
             drop_last=True,
         )
@@ -190,13 +199,13 @@ class SDFdecoderTrainer(Configuration):
     def _set_loss_function(self):
         """_summary_"""
 
-        self.loss_function = nn.L1Loss().to(Configuration.DEVICE)
+        self.loss_function = nn.L1Loss().to(self.DEVICE)
 
     def _set_optimizers(self):
         """_summary_"""
 
-        self.decoder_optimizer = torch.optim.Adam(self.sdf_decoder.parameters(), lr=Configuration.LEARNING_RATE_MODEL)
-        self.latent_optimizer = torch.optim.Adam([self.sdf_decoder.latent_codes], lr=Configuration.LEARNING_RATE_LATENT)
+        self.decoder_optimizer = torch.optim.Adam(self.sdf_decoder.parameters(), lr=self.LEARNING_RATE_MODEL)
+        self.latent_optimizer = torch.optim.Adam([self.sdf_decoder.latent_codes], lr=self.LEARNING_RATE_LATENT)
 
         if self.has_pre_trained_path:
             self.latent_optimizer.load_state_dict(self.all_states["optimizer_l"])
@@ -242,7 +251,7 @@ class SDFdecoderTrainer(Configuration):
             sdf_batch = sdf_batch.unsqueeze(1)
 
             pred = sdf_decoder(cls_batch, xyz_batch)
-            pred_clamped = torch.clamp(pred, -Configuration.CLAMP_VALUE, Configuration.CLAMP_VALUE)
+            pred_clamped = torch.clamp(pred, -self.CLAMP_VALUE, self.CLAMP_VALUE)
 
             decoder_optimizer.zero_grad()
             latent_optimizer.zero_grad()
@@ -258,7 +267,11 @@ class SDFdecoderTrainer(Configuration):
         return sum(losses) / len(losses)
 
     def _evaluate_each_epoch(
-        self, sdf_decoder: SDFdecoder, sdf_val_dataloader: DataLoader, loss_function: _Loss, obj_path: str, epoch: int
+        self,
+        sdf_decoder: SDFdecoder,
+        sdf_val_dataloader: DataLoader,
+        loss_function: _Loss,
+        epoch: int,
     ) -> torch.Tensor:
         """_summary_
 
@@ -281,34 +294,11 @@ class SDFdecoderTrainer(Configuration):
                 sdf_batch = sdf_batch.unsqueeze(1)
 
                 pred = sdf_decoder(cls_batch, xyz_batch)
-                pred_clamped = torch.clamp(pred, -Configuration.CLAMP_VALUE, Configuration.CLAMP_VALUE)
+                pred_clamped = torch.clamp(pred, -self.CLAMP_VALUE, self.CLAMP_VALUE)
 
                 l1_loss = loss_function(pred_clamped, sdf_batch)
 
                 losses.append(l1_loss.item())
-
-            coords, grid_size_axis = reconstruct.ReconstructorHelper.get_volume_coords(
-                resolution=int(Configuration.RECONSTRUCT_RESOLUTION)
-            )
-            coords.to(Configuration.DEVICE)
-            coords_batches = torch.split(coords, coords.shape[0] // 1000)
-
-            sdf = torch.tensor([]).to(Configuration.DEVICE)
-
-            for coords_batch in tqdm(coords_batches, desc=f"Reconstructing in `{epoch}th` epoch", leave=False):
-                cls = torch.tensor([0] * coords_batch.shape[0], dtype=torch.long).to(Configuration.DEVICE)
-                pred = sdf_decoder(cls, coords_batch)
-                if sum(sdf.shape) == 0:
-                    sdf = pred
-                else:
-                    sdf = torch.vstack([sdf, pred])
-
-            vertices, faces = reconstruct.ReconstructorHelper.extract_mesh(grid_size_axis=grid_size_axis, sdf=sdf)
-
-            if vertices is not None and faces is not None:
-                mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
-                mesh.vertices[:, [1, 2]] = mesh.vertices[:, [2, 1]]
-                mesh.export(obj_path.replace(".obj", f"_{epoch}.obj"))
 
         sdf_decoder.train()
 
@@ -323,7 +313,7 @@ class SDFdecoderTrainer(Configuration):
         if self.has_pre_trained_path:
             start = self.all_states["epoch"] + 1
 
-        for epoch in range(start, Configuration.EPOCHS + 1):
+        for epoch in range(start, self.EPOCHS + 1):
             start_time_per_epoch = time.time()
 
             avg_train_loss = self._train_each_epoch(
@@ -335,14 +325,15 @@ class SDFdecoderTrainer(Configuration):
                 epoch=epoch,
             )
 
-            if epoch % Configuration.LOG_INTERVAL == 0:
+            if epoch % self.LOG_INTERVAL == 0:
                 avg_val_loss = self._evaluate_each_epoch(
                     sdf_decoder=self.sdf_decoder,
                     sdf_val_dataloader=self.sdf_val_dataloader,
                     loss_function=self.loss_function,
-                    obj_path=self.obj_path,
                     epoch=epoch,
                 )
+
+                self.reconstruct(self.sdf_decoder, self.sdf_dataset, self.obj_path, epoch)
 
                 self.scheduler_d.step(avg_val_loss)
                 self.scheduler_l.step(avg_val_loss)
@@ -378,13 +369,13 @@ class SDFdecoderTrainer(Configuration):
 
 if __name__ == "__main__":
     sdf_dataset = SDFdataset()
-    sdf_decoder = SDFdecoder(cls_nums=sdf_dataset.cls_nums, latent_size=Configuration.LATENT_SIZE)
+    sdf_decoder = SDFdecoder(cls_nums=sdf_dataset.cls_nums)
     sdf_trainer = SDFdecoderTrainer(
         sdf_dataset=sdf_dataset,
         sdf_decoder=sdf_decoder,
         is_debug_mode=False,
         seed=77777,
-        pre_trained_path=r"deepSDF\runs\2024-03-21_22-11-18",
+        pre_trained_path=r"deepSDF\runs\2024-03-23_17-14-57",
     )
 
     sdf_trainer.train()
