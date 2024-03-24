@@ -189,7 +189,8 @@ class DataCreatorHelper:
         elif translate_mode == DataCreatorHelper.CENTER:
             vector = np.mean(mesh.vertices, axis=0)
         elif translate_mode == DataCreatorHelper.CENTER_WITHOUT_Z:
-            vector = (mesh.bounds.sum(axis=0) * 0.5) * np.array([1, 1, 0])
+            vector = mesh.bounds.sum(axis=0) * 0.5
+            vector[2] = mesh.bounds[0][2]
         else:
             raise ValueError(f"Invalid translate mode: {translate_mode}")
 
