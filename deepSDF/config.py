@@ -31,7 +31,7 @@ class ModelConfiguration:
     LATENT_SIZE = 128
     CLAMP_VALUE = 0.1
 
-    EPOCHS = 20
+    EPOCHS = 50
     LOG_INTERVAL = 1
 
     LEARNING_RATE_MODEL = 0.00001
@@ -67,6 +67,10 @@ class Configuration(DataConfiguration, ModelConfiguration):
         torch.backends.cudnn.benchmark = False
         np.random.seed(seed)
         random.seed(seed)
+
+        print("CUDA status")
+        print(f"  torch.cuda.is_available(): {torch.cuda.is_available()}")
+        print(f"  DEVICE: {Configuration.DEVICE}")
 
         print("Seeds status:")
         print(f"  Seeds set for torch        : {torch.initial_seed()}")
