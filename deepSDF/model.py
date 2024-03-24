@@ -8,7 +8,7 @@ import torch.nn as nn
 
 
 from tqdm import tqdm
-from typing import List, Tuple
+from typing import Tuple, Dict
 from torch.nn.modules.loss import _Loss
 from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
@@ -31,15 +31,14 @@ class SDFdataset(Dataset, Configuration):
 
         return xyz.to(self.DEVICE), sdf.to(self.DEVICE), cls.to(self.DEVICE)
 
-    def _get_sdf_dataset(self, data_path: str) -> List[torch.Tensor]:
-        """_summary_
+    def _get_sdf_dataset(self, data_path: str) -> Tuple[torch.Tensor, int, Dict[int, str]]:
+        """Get dataset and pieces of information related to the dataset.
 
         Args:
-            data_path (str): _description_
-            slicer (int): _description_
+            data_path (str): path to the dataset
 
         Returns:
-            List[torch.Tensor]: _description_
+            List[torch.Tensor]: dataset, number of classes, class dictionary
         """
 
         xyzs = torch.tensor([], dtype=torch.float)
@@ -71,14 +70,14 @@ class SDFdataset(Dataset, Configuration):
                     sdfs = torch.vstack([sdfs, torch.tensor(sdf, dtype=torch.float)])
                     clss = torch.vstack([clss, torch.full((xyz.shape[0], 1), cls, dtype=torch.long)])
 
-        conditions = [
+        post_conditions = [
             xyzs.shape[0] == sdfs.shape[0] == clss.shape[0],
             xyzs.shape[1] == 3,
             sdfs.shape[1] == 1,
             clss.shape[1] == 1,
         ]
 
-        assert all(conditions), "Data conditions are invalid."
+        assert all(post_conditions), "Data conditions are invalid."
 
         sdf_dataset = torch.hstack([xyzs, sdfs, clss])
         cls_nums = clss.max() + 1
@@ -142,7 +141,7 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
         self.pre_trained_path = pre_trained_path
         self.is_debug_mode = is_debug_mode
 
-        self.has_pre_trained_path = os.path.isdir(pre_trained_path)
+        self.is_valid_pre_trained_path = os.path.isdir(pre_trained_path) and len(os.listdir(pre_trained_path)) > 0
 
         if self.is_debug_mode:
             commonutils.add_debugvisualizer(globals())
@@ -156,11 +155,11 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
         self._set_weights()
         self._set_lr_schedulers()
 
-    def _set_summary_writer(self):
-        """_summary_"""
+    def _set_summary_writer(self) -> None:
+        """Set all paths to log. If the pre-trained path exists, use it."""
 
         self.log_dir = os.path.join(self.LOG_DIR, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
-        if self.has_pre_trained_path:
+        if self.is_valid_pre_trained_path:
             self.log_dir = self.pre_trained_path
 
         self.summary_writer = SummaryWriter(log_dir=self.log_dir)
@@ -174,12 +173,15 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
             os.mkdir(self.state_dir)
 
         self.all_states_path = os.path.join(self.state_dir, "all_states.pth")
-        if self.has_pre_trained_path:
+        if self.is_valid_pre_trained_path:
             self.all_states = torch.load(self.all_states_path)
+            print(f"Set all pre-trained states from {self.all_states_path}")
 
         self.obj_path = os.path.join(self.reconstruct_dir, "reconstructed.obj")
 
-    def _set_dataloaders(self):
+    def _set_dataloaders(self) -> None:
+        """Set dataloaders for training and validation by the ratios."""
+
         train_dataset, val_dataset = random_split(self.sdf_dataset, [self.TRAIN_DATASET_RATIO, self.VAL_DATASET_RATIO])
 
         self.sdf_train_dataloader = DataLoader(
@@ -196,29 +198,41 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
             drop_last=True,
         )
 
-    def _set_loss_function(self):
-        """_summary_"""
+        print("Set all dataloaders")
+        print(f"  TRAIN_DATASET_RATIO: {self.TRAIN_DATASET_RATIO}")
+        print(f"  VAL_DATASET_RATIO: {self.VAL_DATASET_RATIO}")
+
+    def _set_loss_function(self) -> None:
+        """Set l1loss
+        https://github.com/facebookresearch/DeepSDF/blob/main/train_deep_sdf.py#L378
+        """
 
         self.loss_function = nn.L1Loss().to(self.DEVICE)
 
-    def _set_optimizers(self):
-        """_summary_"""
+    def _set_optimizers(self) -> None:
+        """Set all optimizers. If the pre-trained path exists, use them."""
 
         self.decoder_optimizer = torch.optim.Adam(self.sdf_decoder.parameters(), lr=self.LEARNING_RATE_MODEL)
         self.latent_optimizer = torch.optim.Adam([self.sdf_decoder.latent_codes], lr=self.LEARNING_RATE_LATENT)
 
-        if self.has_pre_trained_path:
+        if self.is_valid_pre_trained_path:
             self.latent_optimizer.load_state_dict(self.all_states["optimizer_l"])
             self.decoder_optimizer.load_state_dict(self.all_states["optimizer_d"])
+            print("Set all pre-trained optimizers")
 
-    def _set_weights(self):
+    def _set_weights(self) -> None:
+        """Set latent code weights. If the pre-trained path exists, use it."""
+
         nn.init.normal_(self.sdf_decoder.latent_codes, mean=0, std=0.01)
 
-        if self.has_pre_trained_path:
+        if self.is_valid_pre_trained_path:
             self.sdf_decoder.load_state_dict(self.all_states["model_d"])
             self.sdf_decoder.latent_codes = nn.Parameter(self.all_states["latent_codes"])
+            print("Set all pre-trained weights")
 
     def _set_lr_schedulers(self) -> None:
+        """Set learning rate schedulers."""
+
         self.scheduler_d = lr_scheduler.ReduceLROnPlateau(self.decoder_optimizer, patience=5, verbose=True, factor=0.1)
         self.scheduler_l = lr_scheduler.ReduceLROnPlateau(self.latent_optimizer, patience=5, verbose=True, factor=0.1)
 
@@ -231,17 +245,17 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
         loss_function: _Loss,
         epoch: int,
     ) -> torch.Tensor:
-        """_summary_
+        """Train each epoch.
 
         Args:
-            sdf_decoder (SDFdecoder): _description_
-            sdf_train_dataloader (DataLoader): _description_
-            decoder_optimizer (torch.optim.Optimizer): _description_
-            latent_optimizer (torch.optim.Optimizer): _description_
-            loss_function (_Loss): _description_
+            sdf_decoder (SDFdecoder): model
+            sdf_train_dataloader (DataLoader): dataloader for training
+            decoder_optimizer (torch.optim.Optimizer): optimizer for decoder
+            latent_optimizer (torch.optim.Optimizer): optimizer for latent codes
+            loss_function (_Loss): loss function
 
         Returns:
-            torch.Tensor: _description_
+            torch.Tensor: average loss for training
         """
 
         losses = []
@@ -273,15 +287,16 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
         loss_function: _Loss,
         epoch: int,
     ) -> torch.Tensor:
-        """_summary_
+        """Evaluate each epoch.
 
         Args:
-            sdf_decoder (SDFdecoder): _description_
-            sdf_val_dataloader (DataLoader): _description_
-            epoch (int): _description_
+            sdf_decoder (SDFdecoder): model
+            sdf_val_dataloader (DataLoader): dataloader for validation
+            loss_function (_Loss): loss function
+            epoch (int): epoch
 
         Returns:
-            torch.Tensor: _description_
+            torch.Tensor: average loss for validation
         """
 
         losses = []
@@ -305,12 +320,12 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
         return sum(losses) / len(losses)
 
     def train(self) -> None:
-        """_summary_"""
+        """Train DeepSDF decoder."""
 
         best_loss = torch.inf
 
         start = 1
-        if self.has_pre_trained_path:
+        if self.is_valid_pre_trained_path:
             start = self.all_states["epoch"] + 1
 
         for epoch in range(start, self.EPOCHS + 1):
@@ -333,7 +348,9 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
                     epoch=epoch,
                 )
 
-                self.reconstruct(self.sdf_decoder, self.sdf_dataset, self.obj_path, epoch)
+                self.reconstruct(
+                    self.sdf_decoder, self.sdf_dataset, self.obj_path, epoch, normalize=False, map_z_to_y=True
+                )
 
                 self.scheduler_d.step(avg_val_loss)
                 self.scheduler_l.step(avg_val_loss)
@@ -349,6 +366,7 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
                         "optimizer_l": self.latent_optimizer.state_dict(),
                         "optimizer_d": self.decoder_optimizer.state_dict(),
                         "configuration": {k: v for k, v in Configuration()},
+                        "cls_dict": self.sdf_dataset.cls_dict,
                     }
 
                     torch.save(states, self.all_states_path)
@@ -375,7 +393,7 @@ if __name__ == "__main__":
         sdf_decoder=sdf_decoder,
         is_debug_mode=False,
         seed=77777,
-        pre_trained_path=r"deepSDF\runs\2024-03-23_17-14-57",
+        pre_trained_path=r"deepSDF\runs\2024-03-24_12-40-26",
     )
 
     sdf_trainer.train()
