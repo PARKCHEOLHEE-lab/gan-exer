@@ -70,12 +70,12 @@ class Configuration(DataConfiguration, ModelConfiguration):
 
         print("CUDA status")
         print(f"  torch.cuda.is_available(): {torch.cuda.is_available()}")
-        print(f"  DEVICE: {Configuration.DEVICE}")
+        print(f"  DEVICE: {Configuration.DEVICE} \n")
 
         print("Seeds status:")
         print(f"  Seeds set for torch        : {torch.initial_seed()}")
         print(f"  Seeds set for torch on GPU : {torch.cuda.initial_seed()}")
         print(f"  Seeds set for numpy        : {seed}")
-        print(f"  Seeds set for random       : {seed}")
+        print(f"  Seeds set for random       : {seed} \n")
 
         Configuration.SEED_SET = seed

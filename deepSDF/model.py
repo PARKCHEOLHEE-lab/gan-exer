@@ -175,7 +175,7 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
         self.all_states_path = os.path.join(self.state_dir, "all_states.pth")
         if self.is_valid_pre_trained_path:
             self.all_states = torch.load(self.all_states_path)
-            print(f"Set all pre-trained states from {self.all_states_path}")
+            print(f"Set all pre-trained states from {self.all_states_path} \n")
 
         self.obj_path = os.path.join(self.reconstruct_dir, "reconstructed.obj")
 
@@ -200,7 +200,7 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
 
         print("Set all dataloaders")
         print(f"  TRAIN_DATASET_RATIO: {self.TRAIN_DATASET_RATIO}")
-        print(f"  VAL_DATASET_RATIO: {self.VAL_DATASET_RATIO}")
+        print(f"  VAL_DATASET_RATIO: {self.VAL_DATASET_RATIO} \n")
 
     def _set_loss_function(self) -> None:
         """Set l1loss
@@ -218,7 +218,7 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
         if self.is_valid_pre_trained_path:
             self.latent_optimizer.load_state_dict(self.all_states["optimizer_l"])
             self.decoder_optimizer.load_state_dict(self.all_states["optimizer_d"])
-            print("Set all pre-trained optimizers")
+            print("Set all pre-trained optimizers \n")
 
     def _set_weights(self) -> None:
         """Set latent code weights. If the pre-trained path exists, use it."""
@@ -228,7 +228,7 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
         if self.is_valid_pre_trained_path:
             self.sdf_decoder.load_state_dict(self.all_states["model_d"])
             self.sdf_decoder.latent_codes = nn.Parameter(self.all_states["latent_codes"])
-            print("Set all pre-trained weights")
+            print("Set all pre-trained weights \n")
 
     def _set_lr_schedulers(self) -> None:
         """Set learning rate schedulers."""
@@ -323,10 +323,13 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
         """Train DeepSDF decoder."""
 
         best_loss = torch.inf
-
         start = 1
+
         if self.is_valid_pre_trained_path:
             start = self.all_states["epoch"] + 1
+            best_loss = self.all_states["best_loss"]
+
+        print(f"best_loss: {best_loss} \n")
 
         for epoch in range(start, self.EPOCHS + 1):
             start_time_per_epoch = time.time()
