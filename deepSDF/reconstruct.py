@@ -1,3 +1,4 @@
+import time
 import torch
 import trimesh
 import skimage
@@ -13,7 +14,7 @@ class ReconstructorHelper:
     def get_volume_coords(resolution: int = 256, device: str = Configuration.DEVICE) -> Tuple[torch.Tensor, int]:
         # https://github.com/maurock/DeepSDF/blob/main/utils/utils_deepsdf.py#L51-L62
 
-        grid_values = torch.arange(-1, 1, float(1 / resolution)).to(device)
+        grid_values = torch.arange(0, 1, float(1 / resolution)).to(device)
         grid = torch.meshgrid(grid_values, grid_values, grid_values)
 
         grid_size_axis = grid_values.shape[0]
@@ -23,36 +24,43 @@ class ReconstructorHelper:
         return coords, grid_size_axis
 
     @staticmethod
-    def extract_mesh(grid_size_axis: int, sdf: torch.Tensor, normalize: bool = True) -> Tuple[np.ndarray, np.ndarray]:
+    def extract_mesh(
+        grid_size_axis: int, sdf: torch.Tensor, normalize: bool = True, map_z_to_y: bool = False
+    ) -> trimesh.Trimesh:
         # https://github.com/maurock/DeepSDF/blob/main/utils/utils_deepsdf.py#L84-L94
 
         grid_sdf = sdf.reshape(grid_size_axis, grid_size_axis, grid_size_axis).detach().cpu().numpy()
 
         if not (grid_sdf.min() <= 0.00 <= grid_sdf.max()):
-            return None, None
+            return None
 
         vertices, faces, _, _ = skimage.measure.marching_cubes(grid_sdf, level=0.00)
 
         if normalize:
             x_max = np.array([1, 1, 1])
-            x_min = np.array([-1, -1, -1])
+            x_min = np.array([0, 0, 0])
             vertices = vertices * ((x_max - x_min) / grid_size_axis) + x_min
 
-        return vertices, faces
+        mesh = trimesh.Trimesh(vertices, faces)
+
+        if map_z_to_y:
+            mesh.vertices[:, [1, 2]] = mesh.vertices[:, [2, 1]]
+
+        return mesh
 
 
 class Reconstructor(ReconstructorHelper, Configuration):
     def __init__(self):
         pass
 
-    def reconstruct(self, sdf_decoder, sdf_dataset, obj_path, epoch) -> None:
-        """_summary_
+    def reconstruct(self, sdf_decoder, sdf_dataset, obj_path, epoch, normalize=True, map_z_to_y=False) -> None:
+        """Generate mesh from the predicted SDF values
 
         Args:
-            sdf_decoder (_type_): _description_
-            sdf_dataset (_type_): _description_
-            obj_path (_type_): _description_
-            epoch (_type_): _description_
+            sdf_decoder: model
+            sdf_dataset: dataset
+            obj_path: path to save the reconstructed mesh
+            epoch: epoch
         """
 
         sdf_decoder.eval()
@@ -63,23 +71,21 @@ class Reconstructor(ReconstructorHelper, Configuration):
 
             sdf = torch.tensor([]).to(self.DEVICE)
 
-            cls_rand = int(torch.randint(low=0, high=sdf_dataset.cls_nums, size=(1,)))
+            local_generator = torch.Generator().manual_seed(int(time.time()))
+            cls_rand = int(torch.randint(low=0, high=sdf_dataset.cls_nums, size=(1,), generator=local_generator))
 
             for coords_batch in tqdm(coords_batches, desc=f"Reconstructing in `{epoch}th` epoch", leave=False):
                 cls = torch.tensor([cls_rand] * coords_batch.shape[0], dtype=torch.long).to(self.DEVICE)
                 pred = sdf_decoder(cls, coords_batch)
+
                 if sum(sdf.shape) == 0:
                     sdf = pred
                 else:
                     sdf = torch.vstack([sdf, pred])
 
-            vertices, faces = self.extract_mesh(grid_size_axis=grid_size_axis, sdf=sdf)
+            mesh = self.extract_mesh(grid_size_axis=grid_size_axis, sdf=sdf, normalize=normalize, map_z_to_y=map_z_to_y)
 
-            if vertices is not None and faces is not None:
-                cls_name = sdf_dataset.cls_dict[cls_rand]
-
-                mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
-                mesh.vertices[:, [1, 2]] = mesh.vertices[:, [2, 1]]
-                mesh.export(obj_path.replace(".obj", f"_{epoch}_{cls_name}.obj"))
+            if mesh is not None:
+                mesh.export(obj_path.replace(".obj", f"_{epoch}_{sdf_dataset.cls_dict[cls_rand]}.obj"))
 
         sdf_decoder.train()
