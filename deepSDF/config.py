@@ -31,7 +31,7 @@ class ModelConfiguration:
     LATENT_SIZE = 128
     CLAMP_VALUE = 0.1
 
-    EPOCHS = 50
+    EPOCHS = 55
     LOG_INTERVAL = 1
 
     LEARNING_RATE_MODEL = 0.00001
