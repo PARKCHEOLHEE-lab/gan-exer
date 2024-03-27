@@ -262,6 +262,11 @@ class DataCreator(DataCreatorHelper):
                     self.n_volume_sampling,
                 ) = Configuration.get_dynamic_sampling_size(mesh_vertices_count=mesh.vertices.shape[0])
 
+            print(
+                f"mesh_vertices_count: {mesh.vertices.shape[0]}",
+                f"n_total_sampling: {self.n_surface_sampling + self.n_bbox_sampling + self.n_volume_sampling}",
+            )
+
             xyz = self.sample_pts(
                 centralized_mesh, self.n_surface_sampling, self.n_bbox_sampling, self.n_volume_sampling
             )
