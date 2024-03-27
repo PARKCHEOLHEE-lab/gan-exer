@@ -6,6 +6,7 @@ import numpy as np
 import commonutils
 import torch.nn as nn
 
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 from tqdm import tqdm
 from typing import Tuple, Dict
@@ -258,7 +259,8 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
             torch.Tensor: average loss for training
         """
 
-        losses = []
+        train_losses = []
+
         for xyz_batch, sdf_batch, cls_batch in tqdm(
             sdf_train_dataloader, desc=f"Training in `{epoch}th` epoch", leave=False
         ):
@@ -276,9 +278,9 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
             decoder_optimizer.step()
             latent_optimizer.step()
 
-            losses.append(l1_loss.item())
+            train_losses.append(l1_loss.item())
 
-        return sum(losses) / len(losses)
+        return sum(train_losses) / len(train_losses)
 
     def _evaluate_each_epoch(
         self,
@@ -299,7 +301,7 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
             torch.Tensor: average loss for validation
         """
 
-        losses = []
+        val_losses = []
 
         sdf_decoder.eval()
         with torch.no_grad():
@@ -313,11 +315,11 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
 
                 l1_loss = loss_function(pred_clamped, sdf_batch)
 
-                losses.append(l1_loss.item())
+                val_losses.append(l1_loss.item())
 
         sdf_decoder.train()
 
-        return sum(losses) / len(losses)
+        return sum(val_losses) / len(val_losses)
 
     def train(self) -> None:
         """Train DeepSDF decoder."""
