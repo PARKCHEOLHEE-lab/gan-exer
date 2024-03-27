@@ -213,11 +213,13 @@ class DataCreator(DataCreatorHelper):
         raw_data_path: str,
         save_path: str,
         translate_mode: str,
+        dynamic_sampling: bool,
         is_debug_mode: bool = False,
     ) -> None:
         self.raw_data_path = raw_data_path
         self.save_path = save_path
         self.translate_mode = translate_mode
+        self.dynamic_sampling = dynamic_sampling
         self.is_debug_mode = is_debug_mode
 
         self.n_surface_sampling = n_surface_sampling
@@ -229,7 +231,7 @@ class DataCreator(DataCreatorHelper):
 
     @commonutils.runtime_calculator
     def create(self) -> None:
-        """_summary_"""
+        """Create data for training sdf decoder"""
 
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
@@ -252,6 +254,13 @@ class DataCreator(DataCreatorHelper):
 
             centralized_mesh = normalized_mesh.copy()
             centralized_mesh.vertices += np.array([0.5, 0.5, 0])
+
+            if self.dynamic_sampling:
+                (
+                    self.n_surface_sampling,
+                    self.n_bbox_sampling,
+                    self.n_volume_sampling,
+                ) = Configuration.get_dynamic_sampling_size(mesh_vertices_count=mesh.vertices.shape[0])
 
             xyz = self.sample_pts(
                 centralized_mesh, self.n_surface_sampling, self.n_bbox_sampling, self.n_volume_sampling
@@ -279,8 +288,9 @@ if __name__ == "__main__":
         n_bbox_sampling=Configuration.N_BBOX_SAMPLING,
         n_volume_sampling=Configuration.N_VOLUME_SAMPLING,
         raw_data_path=Configuration.RAW_DATA_PATH,
-        save_path=Configuration.SAVE_DATA_PATH,
+        save_path=Configuration.SAVE_DATA_PATH_DYNAMIC_SAMPLED,
         translate_mode=DataCreatorHelper.CENTER_WITHOUT_Z,
+        dynamic_sampling=True,
         is_debug_mode=False,
     )
 

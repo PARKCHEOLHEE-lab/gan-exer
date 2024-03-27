@@ -2,10 +2,13 @@ import torch
 import random
 import numpy as np
 
+from typing import Tuple
+
 
 class DataConfiguration:
     RAW_DATA_PATH = "deepSDF/data/raw-skyscrapers"
     SAVE_DATA_PATH = "deepSDF/data/preprocessed-skyscrapers"
+    SAVE_DATA_PATH_DYNAMIC_SAMPLED = "deepSDF/data/preprocessed-skyscrapers-dynamic-sampled"
 
     N_TOTAL_SAMPLING = 64**3
     N_SURFACE_SAMPLING_RATIO = 0.3
@@ -25,13 +28,44 @@ class DataConfiguration:
 
     RECONSTRUCT_RESOLUTION = 256
 
+    DYNAMIC_SAMPLING_DIVIDER = 100000
+
+    @staticmethod
+    def get_dynamic_sampling_size(
+        mesh_vertices_count: int, divider: int = DYNAMIC_SAMPLING_DIVIDER
+    ) -> Tuple[int, int, int]:
+        """Calculate sampling sizes to create sdf data
+
+        Args:
+            mesh_vertices_count (int): count of vertices from the mesh
+            divider (int): divider to calculate the sampling size
+
+        Returns:
+            Tuple[int, int, int]: all sampling sizes
+        """
+
+        n_total_sampling = divider * int(mesh_vertices_count / divider)
+
+        n_surface_sampling = int(n_total_sampling * DataConfiguration.N_SURFACE_SAMPLING_RATIO)
+        n_bbox_sampling = int(n_total_sampling * DataConfiguration.N_BBOX_SAMPLING_RATIO)
+        n_volume_sampling = int(n_total_sampling * DataConfiguration.N_VOLUME_SAMPLING_RATIO)
+
+        if (n_surface_sampling + n_bbox_sampling + n_volume_sampling) < n_total_sampling:
+            n_volume_sampling += n_total_sampling - (n_surface_sampling + n_bbox_sampling + n_volume_sampling)
+
+        assert (
+            n_surface_sampling + n_bbox_sampling + n_volume_sampling
+        ) == n_total_sampling, "The sum of sampling `n` is not equal to `n_total_sampling`"
+
+        return n_surface_sampling, n_bbox_sampling, n_volume_sampling
+
 
 class ModelConfiguration:
     BATCH_SIZE = 64
     LATENT_SIZE = 128
     CLAMP_VALUE = 0.1
 
-    EPOCHS = 55
+    EPOCHS = 90
     LOG_INTERVAL = 1
 
     LEARNING_RATE_MODEL = 0.00001
