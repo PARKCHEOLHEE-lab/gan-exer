@@ -44,18 +44,11 @@ class DataConfiguration:
             Tuple[int, int, int]: all sampling sizes
         """
 
-        n_total_sampling = divider * int(mesh_vertices_count / divider)
+        n_total_sampling = divider * np.ceil(mesh_vertices_count / divider)
 
         n_surface_sampling = int(n_total_sampling * DataConfiguration.N_SURFACE_SAMPLING_RATIO)
         n_bbox_sampling = int(n_total_sampling * DataConfiguration.N_BBOX_SAMPLING_RATIO)
         n_volume_sampling = int(n_total_sampling * DataConfiguration.N_VOLUME_SAMPLING_RATIO)
-
-        if (n_surface_sampling + n_bbox_sampling + n_volume_sampling) < n_total_sampling:
-            n_volume_sampling += n_total_sampling - (n_surface_sampling + n_bbox_sampling + n_volume_sampling)
-
-        assert (
-            n_surface_sampling + n_bbox_sampling + n_volume_sampling
-        ) == n_total_sampling, "The sum of sampling `n` is not equal to `n_total_sampling`"
 
         return n_surface_sampling, n_bbox_sampling, n_volume_sampling
 
