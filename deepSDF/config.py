@@ -54,6 +54,7 @@ class DataConfiguration:
 
 
 class ModelConfiguration:
+    BATCH_SIZE = 64
     LATENT_SIZE = 128
     CLAMP_VALUE = 0.1
 
