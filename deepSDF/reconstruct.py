@@ -53,7 +53,17 @@ class Reconstructor(ReconstructorHelper, Configuration):
     def __init__(self):
         pass
 
-    def reconstruct(self, sdf_decoder, sdf_dataset, obj_path, epoch, normalize=True, map_z_to_y=False) -> None:
+    def reconstruct(
+        self,
+        sdf_decoder,
+        sdf_dataset,
+        obj_path,
+        epoch,
+        cls_num=None,
+        resolution=Configuration.RECONSTRUCT_RESOLUTION,
+        normalize=True,
+        map_z_to_y=False,
+    ) -> None:
         """Generate mesh from the predicted SDF values
 
         Args:
@@ -61,21 +71,27 @@ class Reconstructor(ReconstructorHelper, Configuration):
             sdf_dataset: dataset
             obj_path: path to save the reconstructed mesh
             epoch: epoch
+            cls_num: class number
+            resolution: resolution for reconstructing
+            normalize: normalize
+            map_z_to_y: map z to y
         """
 
         sdf_decoder.eval()
         with torch.no_grad():
-            coords, grid_size_axis = self.get_volume_coords(resolution=int(self.RECONSTRUCT_RESOLUTION))
+            coords, grid_size_axis = self.get_volume_coords(resolution=resolution)
             coords.to(self.DEVICE)
             coords_batches = torch.split(coords, coords.shape[0] // 1000)
 
             sdf = torch.tensor([]).to(self.DEVICE)
 
             local_generator = torch.Generator().manual_seed(int(time.time()))
-            cls_rand = int(torch.randint(low=0, high=sdf_dataset.cls_nums, size=(1,), generator=local_generator))
+
+            if cls_num is None:
+                cls_num = int(torch.randint(low=0, high=sdf_dataset.cls_nums, size=(1,), generator=local_generator))
 
             for coords_batch in tqdm(coords_batches, desc=f"Reconstructing in `{epoch}th` epoch", leave=False):
-                cls = torch.tensor([cls_rand] * coords_batch.shape[0], dtype=torch.long).to(self.DEVICE)
+                cls = torch.tensor([cls_num] * coords_batch.shape[0], dtype=torch.long).to(self.DEVICE)
                 pred = sdf_decoder(cls, coords_batch)
 
                 if sum(sdf.shape) == 0:
@@ -86,6 +102,6 @@ class Reconstructor(ReconstructorHelper, Configuration):
             mesh = self.extract_mesh(grid_size_axis=grid_size_axis, sdf=sdf, normalize=normalize, map_z_to_y=map_z_to_y)
 
             if mesh is not None:
-                mesh.export(obj_path.replace(".obj", f"_{epoch}_{sdf_dataset.cls_dict[cls_rand]}.obj"))
+                mesh.export(obj_path.replace(".obj", f"_{epoch}_{sdf_dataset.cls_dict[cls_num]}.obj"))
 
         sdf_decoder.train()
