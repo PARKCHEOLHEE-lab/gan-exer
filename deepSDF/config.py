@@ -26,7 +26,7 @@ class DataConfiguration:
         N_SURFACE_SAMPLING + N_BBOX_SAMPLING + N_VOLUME_SAMPLING
     ) == N_TOTAL_SAMPLING, "The sum of sampling `n` is not equal to `n_total_sampling`"
 
-    RECONSTRUCT_RESOLUTION = 256
+    RECONSTRUCT_RESOLUTION = 512
 
     DYNAMIC_SAMPLING_DIVIDER = 100000
 
@@ -54,11 +54,10 @@ class DataConfiguration:
 
 
 class ModelConfiguration:
-    BATCH_SIZE = 64
     LATENT_SIZE = 128
     CLAMP_VALUE = 0.1
 
-    EPOCHS = 90
+    EPOCHS = 100
     LOG_INTERVAL = 1
 
     LEARNING_RATE_MODEL = 0.00001
