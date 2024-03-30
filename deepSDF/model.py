@@ -117,8 +117,10 @@ class SDFdecoder(nn.Module, Configuration):
         self.latent_codes.to(self.DEVICE)
         self.to(self.DEVICE)
 
-    def forward(self, i, xyz):
-        cxyz_1 = torch.cat((self.latent_codes[i], xyz), dim=1)
+    def forward(self, i, xyz, cxyz_1=None):
+        if cxyz_1 is None:
+            cxyz_1 = torch.cat((self.latent_codes[i], xyz), dim=1)
+
         x1 = self.main_1(cxyz_1)
 
         # skip connection
