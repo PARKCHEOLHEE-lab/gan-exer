@@ -240,7 +240,7 @@ class DataCreator(DataCreatorHelper):
             os.path.join(self.raw_data_path, file) for file in os.listdir(self.raw_data_path) if file.endswith(".obj")
         ]
 
-        ray.init(num_cpus=multiprocessing.cpu_count())
+        ray.init(num_cpus=multiprocessing.cpu_count(), ignore_reinit_error=True)
 
         futures = self.calculate_max_length.remote(
             paths, map_z_to_y=True, check_watertight=True, translate_mode=self.translate_mode, save_html=False
@@ -286,17 +286,4 @@ class DataCreator(DataCreatorHelper):
 
             cls += 1
 
-
-if __name__ == "__main__":
-    data_creator = DataCreator(
-        n_surface_sampling=Configuration.N_SURFACE_SAMPLING,
-        n_bbox_sampling=Configuration.N_BBOX_SAMPLING,
-        n_volume_sampling=Configuration.N_VOLUME_SAMPLING,
-        raw_data_path=Configuration.RAW_DATA_PATH,
-        save_path=Configuration.SAVE_DATA_PATH_DYNAMIC_SAMPLED,
-        translate_mode=DataCreatorHelper.CENTER_WITHOUT_Z,
-        dynamic_sampling=True,
-        is_debug_mode=False,
-    )
-
-    data_creator.create()
+        ray.shutdown()
