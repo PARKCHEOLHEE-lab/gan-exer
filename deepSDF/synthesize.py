@@ -1,4 +1,3 @@
-import os
 import torch
 
 from tqdm import tqdm
@@ -40,14 +39,12 @@ class Synthesizer(ReconstructorHelper, SynthesizerHelper, Configuration):
     def synthesize(
         self,
         sdf_decoder: SDFdecoder,
-        interpolation_cls_nums: List[int],
-        interpolation_factors: List[float],
-        addition_cls_nums: List[int],
-        subtraction_cls_nums: List[int],
-        save_dir: str,
+        latent_code: torch.Tensor,
+        save_name: str = None,
         resolution: int = Configuration.RECONSTRUCT_RESOLUTION,
         normalize: bool = True,
         map_z_to_y: bool = False,
+        check_watertight: bool = False,
     ):
         """Synthesize skyscrapers
 
@@ -71,11 +68,8 @@ class Synthesizer(ReconstructorHelper, SynthesizerHelper, Configuration):
 
         Args:
             sdf_decoder (SDFdecoder): model
-            interpolation_cls_nums (List[int]): cls nums to interpolate
-            interpolation_factors (List[float]):  factors to interpolate
-            addition_cls_nums (List[int]): cls nums to add
-            subtraction_cls_nums (List[int]): cls nums to subtract
-            save_dir (str): save dir
+            latent_code (torch.Tensor): latent code
+            save_name (str): save name
             resolution (int, optional): resolution for reconstruction. Defaults to Configuration.RECONSTRUCT_RESOLUTION.
             normalize (bool, optional): normalize. Defaults to True.
             map_z_to_y (bool, optional): map z to y. Defaults to False.
@@ -84,19 +78,6 @@ class Synthesizer(ReconstructorHelper, SynthesizerHelper, Configuration):
         sdf_decoder.eval()
 
         with torch.no_grad():
-            interpolated = self.interpolate(
-                latent_codes=[sdf_decoder.latent_codes[cls_num] for cls_num in interpolation_cls_nums],
-                factors=interpolation_factors,
-            )
-
-            for addition_cls_num in addition_cls_nums:
-                interpolated += sdf_decoder.latent_codes[addition_cls_num]
-
-            for subtraction_cls_num in subtraction_cls_nums:
-                interpolated -= sdf_decoder.latent_codes[subtraction_cls_num]
-
-            assert interpolated.shape[0] == Configuration.LATENT_SIZE, "Post-synthesis shape is not valid."
-
             coords, grid_size_axis = self.get_volume_coords(resolution=resolution)
             coords.to(self.DEVICE)
             coords_batches = torch.split(coords, coords.shape[0] // 1000)
@@ -104,7 +85,7 @@ class Synthesizer(ReconstructorHelper, SynthesizerHelper, Configuration):
             sdf = torch.tensor([]).to(self.DEVICE)
 
             for coords_batch in tqdm(coords_batches, desc="Synthesizing ... ", leave=False):
-                interpolated_repeat = interpolated.unsqueeze(1).repeat(1, coords_batch.shape[0]).transpose(0, 1)
+                interpolated_repeat = latent_code.unsqueeze(1).repeat(1, coords_batch.shape[0]).transpose(0, 1)
                 cxyz_1 = torch.cat([interpolated_repeat, coords_batch], dim=1)
                 pred = sdf_decoder(None, None, cxyz_1)
 
@@ -113,12 +94,17 @@ class Synthesizer(ReconstructorHelper, SynthesizerHelper, Configuration):
                 else:
                     sdf = torch.vstack([sdf, pred])
 
-            mesh = self.extract_mesh(grid_size_axis=grid_size_axis, sdf=sdf, normalize=normalize, map_z_to_y=map_z_to_y)
+            mesh = self.extract_mesh(
+                grid_size_axis=grid_size_axis,
+                sdf=sdf,
+                normalize=normalize,
+                map_z_to_y=map_z_to_y,
+                check_watertight=check_watertight,
+            )
 
-            if mesh is not None:
-                factors_str = "_".join([f"{factor:.2f}".replace(".", "_") for factor in interpolation_factors])
-                cls_nums_str = "_".join(map(str, interpolation_cls_nums + addition_cls_nums + subtraction_cls_nums))
-                save_name = os.path.join(save_dir, f"{cls_nums_str}_{factors_str}.obj")
+            if mesh is not None and save_name is not None:
                 mesh.export(save_name)
 
         sdf_decoder.train()
+
+        return mesh
