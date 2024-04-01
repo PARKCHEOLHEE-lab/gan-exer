@@ -138,11 +138,13 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
         seed: int = Configuration.DEFAULT_SEED,
         pre_trained_path: str = "",
         is_debug_mode: bool = False,
+        is_reconstruct_mode: bool = False,
     ):
         self.sdf_dataset = sdf_dataset
         self.sdf_decoder = sdf_decoder
         self.pre_trained_path = pre_trained_path
         self.is_debug_mode = is_debug_mode
+        self.is_reconstruct_mode = is_reconstruct_mode
 
         self.is_valid_pre_trained_path = os.path.isdir(pre_trained_path) and len(os.listdir(pre_trained_path)) > 0
 
@@ -151,12 +153,13 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
 
         self.set_seed(seed)
 
-        self._set_summary_writer()
-        self._set_dataloaders()
-        self._set_loss_function()
-        self._set_optimizers()
-        self._set_weights()
-        self._set_lr_schedulers()
+        if not self.is_reconstruct_mode:
+            self._set_summary_writer()
+            self._set_dataloaders()
+            self._set_loss_function()
+            self._set_optimizers()
+            self._set_weights()
+            self._set_lr_schedulers()
 
     def _set_summary_writer(self) -> None:
         """Set all paths to log. If the pre-trained path exists, use it."""
@@ -356,7 +359,7 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
                 )
 
                 self.reconstruct(
-                    self.sdf_decoder, self.sdf_dataset, self.obj_path, epoch, normalize=False, map_z_to_y=True
+                    self.sdf_decoder, self.sdf_dataset.cls_dict, self.obj_path, epoch, normalize=False, map_z_to_y=True
                 )
 
                 self.scheduler_d.step(avg_val_loss)
@@ -390,17 +393,3 @@ class SDFdecoderTrainer(Reconstructor, Configuration):
                 self.summary_writer.add_scalar("Loss/val", avg_val_loss, epoch)
 
             print(f"Epoch: {epoch}th epoch took {time.time() - start_time_per_epoch} seconds")
-
-
-if __name__ == "__main__":
-    sdf_dataset = SDFdataset()
-    sdf_decoder = SDFdecoder(cls_nums=sdf_dataset.cls_nums)
-    sdf_trainer = SDFdecoderTrainer(
-        sdf_dataset=sdf_dataset,
-        sdf_decoder=sdf_decoder,
-        is_debug_mode=False,
-        seed=77777,
-        pre_trained_path=r"deepSDF\runs\2024-03-24_12-40-26",
-    )
-
-    sdf_trainer.train()
