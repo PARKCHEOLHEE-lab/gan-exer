@@ -3,6 +3,7 @@ import torch
 import trimesh
 import skimage
 import numpy as np
+import point_cloud_utils as pcu
 
 from tqdm import tqdm
 from typing import Tuple
@@ -25,7 +26,11 @@ class ReconstructorHelper:
 
     @staticmethod
     def extract_mesh(
-        grid_size_axis: int, sdf: torch.Tensor, normalize: bool = True, map_z_to_y: bool = False
+        grid_size_axis: int,
+        sdf: torch.Tensor,
+        normalize: bool = True,
+        map_z_to_y: bool = False,
+        check_watertight: bool = False,
     ) -> trimesh.Trimesh:
         # https://github.com/maurock/DeepSDF/blob/main/utils/utils_deepsdf.py#L84-L94
 
@@ -43,6 +48,10 @@ class ReconstructorHelper:
 
         mesh = trimesh.Trimesh(vertices, faces)
 
+        if check_watertight and not mesh.is_watertight:
+            vertices, faces = pcu.make_mesh_watertight(mesh.vertices, mesh.faces, resolution=100000)
+            mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+
         if map_z_to_y:
             mesh.vertices[:, [1, 2]] = mesh.vertices[:, [2, 1]]
 
@@ -56,7 +65,7 @@ class Reconstructor(ReconstructorHelper, Configuration):
     def reconstruct(
         self,
         sdf_decoder,
-        sdf_dataset,
+        cls_dict,
         obj_path,
         epoch,
         cls_num=None,
@@ -88,7 +97,8 @@ class Reconstructor(ReconstructorHelper, Configuration):
             local_generator = torch.Generator().manual_seed(int(time.time()))
 
             if cls_num is None:
-                cls_num = int(torch.randint(low=0, high=sdf_dataset.cls_nums, size=(1,), generator=local_generator))
+                cls_nums = max(cls_dict.keys()) + 1
+                cls_num = int(torch.randint(low=0, high=cls_nums, size=(1,), generator=local_generator))
 
             for coords_batch in tqdm(coords_batches, desc=f"Reconstructing in `{epoch}th` epoch", leave=False):
                 cls = torch.tensor([cls_num] * coords_batch.shape[0], dtype=torch.long).to(self.DEVICE)
@@ -102,6 +112,6 @@ class Reconstructor(ReconstructorHelper, Configuration):
             mesh = self.extract_mesh(grid_size_axis=grid_size_axis, sdf=sdf, normalize=normalize, map_z_to_y=map_z_to_y)
 
             if mesh is not None:
-                mesh.export(obj_path.replace(".obj", f"_{epoch}_{sdf_dataset.cls_dict[cls_num]}.obj"))
+                mesh.export(obj_path.replace(".obj", f"_{epoch}_{cls_dict[cls_num]}.obj"))
 
         sdf_decoder.train()
