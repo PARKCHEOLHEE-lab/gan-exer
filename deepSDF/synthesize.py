@@ -1,4 +1,5 @@
 import torch
+import commonutils
 
 from tqdm import tqdm
 from typing import List
@@ -36,6 +37,7 @@ class Synthesizer(ReconstructorHelper, SynthesizerHelper, Configuration):
     def __init__(self) -> None:
         pass
 
+    @commonutils.runtime_calculator
     def synthesize(
         self,
         sdf_decoder: SDFdecoder,
