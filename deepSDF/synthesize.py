@@ -78,36 +78,31 @@ class Synthesizer(ReconstructorHelper, SynthesizerHelper, Configuration):
             map_z_to_y (bool, optional): map z to y. Defaults to False.
         """
 
-        sdf_decoder.eval()
+        coords, grid_size_axis = self.get_volume_coords(resolution=resolution)
+        coords.to(self.DEVICE)
+        coords_batches = torch.split(coords, coords.shape[0] // 1000)
 
-        with torch.no_grad():
-            coords, grid_size_axis = self.get_volume_coords(resolution=resolution)
-            coords.to(self.DEVICE)
-            coords_batches = torch.split(coords, coords.shape[0] // 1000)
+        sdf = torch.tensor([]).to(self.DEVICE)
 
-            sdf = torch.tensor([]).to(self.DEVICE)
+        for coords_batch in tqdm(coords_batches, desc="Synthesizing ... ", leave=False):
+            interpolated_repeat = latent_code.unsqueeze(1).repeat(1, coords_batch.shape[0]).transpose(0, 1)
+            cxyz_1 = torch.cat([interpolated_repeat, coords_batch], dim=1)
+            pred = sdf_decoder(None, None, cxyz_1)
 
-            for coords_batch in tqdm(coords_batches, desc="Synthesizing ... ", leave=False):
-                interpolated_repeat = latent_code.unsqueeze(1).repeat(1, coords_batch.shape[0]).transpose(0, 1)
-                cxyz_1 = torch.cat([interpolated_repeat, coords_batch], dim=1)
-                pred = sdf_decoder(None, None, cxyz_1)
+            if sum(sdf.shape) == 0:
+                sdf = pred
+            else:
+                sdf = torch.vstack([sdf, pred])
 
-                if sum(sdf.shape) == 0:
-                    sdf = pred
-                else:
-                    sdf = torch.vstack([sdf, pred])
+        mesh = self.extract_mesh(
+            grid_size_axis=grid_size_axis,
+            sdf=sdf,
+            normalize=normalize,
+            map_z_to_y=map_z_to_y,
+            check_watertight=check_watertight,
+        )
 
-            mesh = self.extract_mesh(
-                grid_size_axis=grid_size_axis,
-                sdf=sdf,
-                normalize=normalize,
-                map_z_to_y=map_z_to_y,
-                check_watertight=check_watertight,
-            )
-
-            if mesh is not None and save_name is not None:
-                mesh.export(save_name)
-
-        sdf_decoder.train()
+        if mesh is not None and save_name is not None:
+            mesh.export(save_name)
 
         return mesh
