@@ -37,6 +37,7 @@ class Synthesizer(ReconstructorHelper, SynthesizerHelper, Configuration):
     def __init__(self) -> None:
         pass
 
+    @torch.inference_mode()
     @commonutils.runtime_calculator
     def synthesize(
         self,
