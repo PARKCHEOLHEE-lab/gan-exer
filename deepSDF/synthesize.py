@@ -1,8 +1,10 @@
 import torch
+import time
+import random
 import commonutils
 
 from tqdm import tqdm
-from typing import List
+from typing import List, Tuple
 from deepSDF.model import SDFdecoder
 from deepSDF.config import Configuration
 from deepSDF.reconstruct import ReconstructorHelper
@@ -36,6 +38,42 @@ class SynthesizerHelper:
 class Synthesizer(ReconstructorHelper, SynthesizerHelper, Configuration):
     def __init__(self) -> None:
         pass
+
+    def random_interpolation_synthesis(
+        self, sdf_decoder: SDFdecoder, latent_codes_data: dict
+    ) -> Tuple[int, int, torch.Tensor]:
+        """Randomly synthesize latent codes by interpolating them
+
+        Args:
+            sdf_decoder (SDFdecoder): model
+            latent_codes (dict): all latent codes
+
+        Returns:
+            Tuple[int, int, float, torch.Tensor]: selected indices, interpolation factor, and synthesized latent code
+        """
+
+        data_to_sample = latent_codes_data["data"]
+
+        if random.Random(time.time()).random() < 0.5:
+            data_to_sample = data_to_sample[: len(sdf_decoder.latent_codes)]
+
+        data_1, data_2 = random.Random(time.time()).sample(data_to_sample, 2)
+
+        latent_code_1 = data_1["latent_code"]
+        latent_code_1 = torch.tensor(latent_code_1).to(sdf_decoder.latent_codes.device)
+        latent_code_1_index = data_1["index"]
+
+        latent_code_2 = data_2["latent_code"]
+        latent_code_2 = torch.tensor(latent_code_2).to(sdf_decoder.latent_codes.device)
+        latent_code_2_index = data_2["index"]
+
+        random_interpolation_factor = round(0.25 + (0.75 - 0.25) * random.Random(time.time()).random(), 3)
+
+        synthesized_latent_code = self.interpolate(
+            latent_codes=[latent_code_1, latent_code_2], factors=[random_interpolation_factor]
+        )
+
+        return latent_code_1_index, latent_code_2_index, random_interpolation_factor, synthesized_latent_code
 
     @torch.inference_mode()
     @commonutils.runtime_calculator
