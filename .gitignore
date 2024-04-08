@@ -9,6 +9,10 @@ lirGAN/pths/
 
 deepSDF/data/raw/
 deepSDF/data/preprocessed/
+deepSDF/runs/2024-03-27_22-28-06/
+deepSDF/runs/2024-03-24_12-40-26/originals
+deepSDF/runs/2024-03-24_12-40-26/synthesized
+deepSDF/runs/2024-03-24_12-40-26/visualized
 
-runs/
+events.out.tfevents.*
 *.3dmbak
