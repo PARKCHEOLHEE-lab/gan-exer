@@ -194,7 +194,18 @@ def infinite_synthesis(
     resolution: int = 128,
     map_z_to_y: bool = True,
     check_watertight: bool = True,
-):
+) -> None:
+    """Synthesize 3d models as much as `synthesis_count`
+
+    Args:
+        sdf_decoder (SDFdecoder): model
+        save_dir (str): save directory
+        synthesis_count (int, optional): synthesis count. Defaults to np.inf.
+        resolution (int, optional): resolution. Defaults to 128.
+        map_z_to_y (bool, optional): whether map z to y. Defaults to True.
+        check_watertight (bool, optional): whether check watertight. Defaults to True.
+    """
+
     synthesizer = Synthesizer()
 
     synthesized_latent_codes_npz = "infinite_synthesized_latent_codes.npz"
