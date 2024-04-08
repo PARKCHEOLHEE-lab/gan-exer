@@ -2,7 +2,8 @@ import os
 import time
 import imageio
 
-from typing import Callable
+from typing import List, Callable
+from tensorboard.backend.event_processing import event_accumulator
 
 
 def create_animation_gif(
@@ -78,3 +79,23 @@ def add_debugvisualizer(globals_dict: dict) -> None:
     globals_dict["Plotter"] = Plotter
     globals_dict["geometry"] = geometry
     globals_dict["trimesh"] = trimesh
+
+
+def get_scalar_values_from_tensorboard(log_dir: str, scalar_name: str) -> List[float]:
+    """Get the scalars from TensorBoard.
+
+    Args:
+        log_dir (str): The directory where the TensorBoard logs are stored.
+        scalar_name (str): The name of the scalar to get.
+
+    Returns:
+        List[float]: A list of the scalars.
+    """
+
+    ea = event_accumulator.EventAccumulator(log_dir, size_guidance={event_accumulator.SCALARS: 0})
+
+    ea.Reload()
+
+    scalars = ea.Scalars(scalar_name)
+
+    return [s.value for s in scalars]
