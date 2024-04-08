@@ -219,8 +219,7 @@ def infinite_synthesis(
             "data": list(np.load(synthesized_latent_codes_path, allow_pickle=True)["synthesized_data"])
         }
 
-    c = 0
-    while c < synthesis_count:
+    while len(synthesized_latent_codes["data"]) < synthesis_count:
         print("synthesized data length:", len(synthesized_latent_codes["data"]))
 
         if random.Random(time.time()).random() < 0.5:
@@ -274,5 +273,3 @@ def infinite_synthesis(
         )
 
         clear_output(wait=False)
-
-        c += 1
