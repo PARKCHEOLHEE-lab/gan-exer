@@ -195,7 +195,7 @@ def infinite_synthesis(
     map_z_to_y: bool = True,
     check_watertight: bool = True,
 ) -> None:
-    """Synthesize 3d models as much as `synthesis_count`
+    """Synthesize 3d models
 
     Args:
         sdf_decoder (SDFdecoder): model
