@@ -1,11 +1,14 @@
-import torch
+import os
 import time
+import torch
 import random
 import commonutils
+import numpy as np
 
 from tqdm import tqdm
 from typing import List, Tuple
 from deepSDF.model import SDFdecoder
+from IPython.display import clear_output
 from deepSDF.config import Configuration
 from deepSDF.reconstruct import ReconstructorHelper
 
@@ -41,7 +44,7 @@ class Synthesizer(ReconstructorHelper, SynthesizerHelper, Configuration):
 
     def random_interpolation_synthesis(
         self, sdf_decoder: SDFdecoder, latent_codes_data: dict
-    ) -> Tuple[int, int, torch.Tensor]:
+    ) -> Tuple[int, int, float, torch.Tensor]:
         """Randomly synthesize latent codes by interpolating them
 
         Args:
@@ -57,6 +60,8 @@ class Synthesizer(ReconstructorHelper, SynthesizerHelper, Configuration):
         if random.Random(time.time()).random() < 0.5:
             data_to_sample = data_to_sample[: len(sdf_decoder.latent_codes)]
 
+        data_to_sample = [rd for rd in data_to_sample if rd["synthesis_type"] != "arithmetic"]
+
         data_1, data_2 = random.Random(time.time()).sample(data_to_sample, 2)
 
         latent_code_1 = data_1["latent_code"]
@@ -67,13 +72,49 @@ class Synthesizer(ReconstructorHelper, SynthesizerHelper, Configuration):
         latent_code_2 = torch.tensor(latent_code_2).to(sdf_decoder.latent_codes.device)
         latent_code_2_index = data_2["index"]
 
+        selected_indices = f"{latent_code_1_index}__{latent_code_2_index}"
+
         random_interpolation_factor = round(0.25 + (0.75 - 0.25) * random.Random(time.time()).random(), 3)
 
         synthesized_latent_code = self.interpolate(
             latent_codes=[latent_code_1, latent_code_2], factors=[random_interpolation_factor]
         )
 
-        return latent_code_1_index, latent_code_2_index, random_interpolation_factor, synthesized_latent_code
+        return selected_indices, random_interpolation_factor, synthesized_latent_code
+
+    def random_arithmetic_operations_synthesis(
+        self, sdf_decoder: SDFdecoder, latent_codes_data: dict
+    ) -> Tuple[str, torch.Tensor]:
+        """Randomly synthesize latent codes by arithmetic operations
+
+        Args:
+            sdf_decoder (SDFdecoder): model
+            latent_codes_data (dict): all latent codes
+
+        Returns:
+            Tuple[str, torch.Tensor]: selected indices and synthesized latent code
+        """
+
+        data_to_sample = latent_codes_data["data"]
+
+        if random.Random(time.time()).random() < 0.5:
+            data_to_sample = data_to_sample[: len(sdf_decoder.latent_codes)]
+
+        data_to_sample = [rd for rd in data_to_sample if rd["synthesis_type"] != "interpolation"]
+
+        random_data = random.Random(time.time()).sample(data_to_sample, 3)
+
+        selected_indices = str(random_data[0]["index"])
+        synthesized_latent_code = torch.tensor(random_data[0]["latent_code"]).to(sdf_decoder.latent_codes.device)
+        for rdi, rd in enumerate(random_data[1:]):
+            if rdi != len(random_data[1:]) - 1:
+                synthesized_latent_code += torch.tensor(rd["latent_code"]).to(sdf_decoder.latent_codes.device)
+            else:
+                synthesized_latent_code -= torch.tensor(rd["latent_code"]).to(sdf_decoder.latent_codes.device)
+
+            selected_indices += "__" + str(rd["index"])
+
+        return selected_indices, synthesized_latent_code
 
     @torch.inference_mode()
     @commonutils.runtime_calculator
@@ -144,3 +185,94 @@ class Synthesizer(ReconstructorHelper, SynthesizerHelper, Configuration):
             mesh.export(save_name)
 
         return mesh
+
+
+def infinite_synthesis(
+    sdf_decoder: SDFdecoder,
+    save_dir: str,
+    synthesis_count: int = np.inf,
+    resolution: int = 128,
+    map_z_to_y: bool = True,
+    check_watertight: bool = True,
+):
+    synthesizer = Synthesizer()
+
+    synthesized_latent_codes_npz = "infinite_synthesized_latent_codes.npz"
+    synthesized_latent_codes_path = os.path.join(save_dir, synthesized_latent_codes_npz)
+
+    os.makedirs(save_dir, exist_ok=True)
+
+    synthesized_latent_codes = {
+        "data": [
+            {
+                "name": i,
+                "index": i,
+                "synthesis_type": "initial",
+                "latent_code": list(latent_code.detach().cpu().numpy()),
+            }
+            for i, latent_code in enumerate(sdf_decoder.latent_codes)
+        ]
+    }
+
+    if os.path.exists(synthesized_latent_codes_path):
+        synthesized_latent_codes = {
+            "data": list(np.load(synthesized_latent_codes_path, allow_pickle=True)["synthesized_data"])
+        }
+
+    c = 0
+    while c < synthesis_count:
+        print("synthesized data length:", len(synthesized_latent_codes["data"]))
+
+        if random.Random(time.time()).random() < 0.5:
+            selected_indices, synthesized_latent_code = synthesizer.random_arithmetic_operations_synthesis(
+                sdf_decoder=sdf_decoder, latent_codes_data=synthesized_latent_codes
+            )
+
+            synthesis_type = "arithmetic"
+
+            name = f"{selected_indices}.obj"
+            save_name = os.path.join(save_dir, name)
+
+        else:
+            (
+                selected_indices,
+                random_interpolation_factor,
+                synthesized_latent_code,
+            ) = synthesizer.random_interpolation_synthesis(
+                sdf_decoder=sdf_decoder, latent_codes_data=synthesized_latent_codes
+            )
+
+            synthesis_type = "interpolation"
+
+            name = f"{selected_indices}__{str(random_interpolation_factor).replace('.', '-')}.obj"
+            save_name = os.path.join(save_dir, name)
+
+        if os.path.exists(save_name):
+            continue
+
+        _ = synthesizer.synthesize(
+            sdf_decoder=sdf_decoder,
+            latent_code=synthesized_latent_code,
+            resolution=resolution,
+            save_name=save_name,
+            map_z_to_y=map_z_to_y,
+            check_watertight=check_watertight,
+        )
+
+        synthesized_data = {
+            "name": name,
+            "index": len(synthesized_latent_codes["data"]),
+            "synthesis_type": synthesis_type,
+            "latent_code": list(synthesized_latent_code.detach().cpu().numpy()),
+        }
+
+        synthesized_latent_codes["data"].append(synthesized_data)
+
+        np.savez(
+            synthesized_latent_codes_path,
+            synthesized_data=np.array(synthesized_latent_codes["data"]),
+        )
+
+        clear_output(wait=False)
+
+        c += 1
