@@ -6,6 +6,7 @@ import commonutils
 import numpy as np
 
 from tqdm import tqdm
+from collections import deque
 from typing import List, Tuple
 from deepSDF.model import SDFdecoder
 from IPython.display import clear_output
@@ -284,3 +285,38 @@ def infinite_synthesis(
         )
 
         clear_output(wait=False)
+
+
+def trace_back_to_origin(latent_codes_data: dict, index: int) -> List[dict]:
+    """Trace back to the origin of the synthesis using bfs
+
+    Args:
+        latent_codes_data (dict): all synthesized latent codes
+        index (int): index of the synthesis
+
+    Returns:
+        List[dict]: traced data
+    """
+
+    queue = deque([index])
+    traced_data = []
+
+    while queue:
+        current_index = queue.popleft()
+        current_data = latent_codes_data[current_index]
+        synthesis_type = current_data["synthesis_type"]
+
+        traced_data.append(current_data)
+
+        if synthesis_type == "initial":
+            continue
+
+        elif synthesis_type == "interpolation":
+            indices = [int(i) for i in current_data["name"].split("__")[:-1]]
+
+        elif synthesis_type == "arithmetic":
+            indices = [int(i.replace(".obj", "")) for i in current_data["name"].split("__")]
+
+        queue.extend(indices)
+
+    return traced_data
