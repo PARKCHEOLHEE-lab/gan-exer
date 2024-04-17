@@ -4,6 +4,8 @@ import torch
 import random
 import commonutils
 import numpy as np
+import networkx as nx
+import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 from collections import deque
@@ -287,7 +289,7 @@ def infinite_synthesis(
         clear_output(wait=False)
 
 
-def trace_back_to_origin(latent_codes_data: dict, index: int) -> List[dict]:
+def trace_back_to_origin(latent_codes_data: np.ndarray, index: int) -> List[dict]:
     """Trace back to the origin of the synthesis using bfs
 
     Args:
@@ -320,3 +322,47 @@ def trace_back_to_origin(latent_codes_data: dict, index: int) -> List[dict]:
         queue.extend(indices)
 
     return traced_data
+
+
+def visualize_traced_data_as_graph(latent_codes_data: np.ndarray, index: int):
+    """Visualize the traced data as a graph.
+
+    Args:
+        latent_codes_data (dict): All synthesized latent codes.
+        index (int): Index of the synthesis to trace back from.
+    """
+    traced_data = trace_back_to_origin(latent_codes_data, index)
+
+    graph = nx.DiGraph()
+
+    for data in traced_data:
+        current_index = data["index"]
+        graph.add_node(current_index, label=data["index"])
+
+        synthesis_type = data["synthesis_type"]
+        if synthesis_type != "initial":
+            indices = [int(i.replace(".obj", "")) for i in data["name"].split("__") if i.replace(".obj", "").isdigit()]
+            for idx in indices:
+                graph.add_edge(idx, current_index)
+
+    labels = nx.get_node_attributes(graph, "label")
+
+    node_base_size = 300
+    node_colors = ["red" if node == index else "gray" for node in graph.nodes()]
+    node_sizes = [node_base_size * 2 if node == index else node_base_size for node in graph.nodes()]
+
+    nx.draw(
+        graph,
+        nx.circular_layout(graph),
+        with_labels=True,
+        labels=labels,
+        node_size=node_sizes,
+        node_color=node_colors,
+        font_color="white",
+        font_size=6,
+        font_weight="bold",
+        edge_color="lightgray",
+    )
+
+    plt.axis("equal")
+    plt.show()
